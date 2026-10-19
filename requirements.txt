@@ -1,0 +1,7 @@
+pyTelegramBotAPI
+requests
+feedparser
+google-genai
+psycopg[binary,pool]
+fastapi
+uvicorn
