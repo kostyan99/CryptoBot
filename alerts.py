@@ -79,6 +79,11 @@ class AdminLogHandler(logging.Handler):
             return
         try:
             msg = _sanitize(record.getMessage())[:1200]
+            
+            # Фильтр для игнорирования штатных сетевых таймаутов от telebot
+            if "Read timed out" in msg or "Connection reset by peer" in msg:
+                return
+                
             exc = ""
             if record.exc_info:
                 exc = "\n" + _sanitize("".join(traceback.format_exception(*record.exc_info)[-2:]))[:1200]
