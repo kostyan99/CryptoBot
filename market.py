@@ -2,6 +2,7 @@
 import calendar
 import collections
 import html
+import json
 import logging
 import random
 import re
@@ -62,6 +63,48 @@ LABELS = {
     "de": {"hdr_market": "📊 <b>Marktübersicht, {time}</b>", "hdr_digest": "🧠 <b>Krypto-Digest, {time}</b>",
            "top": "🏆 <b>Top {n} Coins</b>", "gainers": "🚀 <b>Größte Gewinner</b>",
            "losers": "🔻 <b>Größte Verlierer</b>", "ai": "🧠 <b>Analyse:</b>", "fact": "💡 <b>Wussten Sie schon?</b>"},
+}
+
+EXTRA = {
+    "en": {"custom": "⭐ <b>Your coins</b>", "alert_hdr": "🚨 <b>Whoa, big move!</b>", "alert_per": "1h",
+           "fng": "Fear & Greed", "dom": "BTC dominance"},
+    "ru": {"custom": "⭐ <b>Ваши монеты</b>", "alert_hdr": "🚨 <b>Ого, резкое движение!</b>", "alert_per": "за час",
+           "fng": "Страх и жадность", "dom": "Доминирование BTC"},
+    "fr": {"custom": "⭐ <b>Vos cryptos</b>", "alert_hdr": "🚨 <b>Wow, gros mouvement !</b>", "alert_per": "en 1 h",
+           "fng": "Peur & Avidité", "dom": "Dominance BTC"},
+    "es": {"custom": "⭐ <b>Tus monedas</b>", "alert_hdr": "🚨 <b>¡Uf, gran movimiento!</b>", "alert_per": "en 1 h",
+           "fng": "Miedo y Codicia", "dom": "Dominancia BTC"},
+    "de": {"custom": "⭐ <b>Ihre Coins</b>", "alert_hdr": "🚨 <b>Wow, starke Bewegung!</b>", "alert_per": "in 1 Std.",
+           "fng": "Angst & Gier", "dom": "BTC-Dominanz"},
+}
+for _l in LABELS:
+    LABELS[_l].update(EXTRA[_l])
+
+# настроение рынка по среднему изменению топ-10 за 24ч: bull / up / calm / down / bear
+MOOD = {
+    "en": ["Green party on the market! 🟢🎉", "A pleasant green day 🌱", "Calm waters today 🌊",
+           "A little red today 🍂", "Rough day out there — hold tight 🫡🔴"],
+    "ru": ["На рынке зелёная вечеринка! 🟢🎉", "Приятный зелёный день 🌱", "Сегодня штиль 🌊",
+           "Немного красного на рынке 🍂", "Тяжёлый день на рынке — держимся 🫡🔴"],
+    "fr": ["Fête verte sur le marché ! 🟢🎉", "Une belle journée verte 🌱", "Mer calme aujourd’hui 🌊",
+           "Un peu de rouge aujourd’hui 🍂", "Journée difficile — on tient bon 🫡🔴"],
+    "es": ["¡Fiesta verde en el mercado! 🟢🎉", "Un agradable día en verde 🌱", "Aguas tranquilas hoy 🌊",
+           "Un poco de rojo hoy 🍂", "Día duro — a aguantar 🫡🔴"],
+    "de": ["Grüne Party am Markt! 🟢🎉", "Ein angenehmer grüner Tag 🌱", "Heute ruhige Gewässer 🌊",
+           "Heute etwas Rot 🍂", "Harter Tag — durchhalten 🫡🔴"],
+}
+
+# классы индекса Fear & Greed (как их отдаёт alternative.me)
+FNG_CLASS = {
+    "ru": {"Extreme Fear": "Экстремальный страх", "Fear": "Страх", "Neutral": "Нейтрально",
+           "Greed": "Жадность", "Extreme Greed": "Экстремальная жадность"},
+    "fr": {"Extreme Fear": "Peur extrême", "Fear": "Peur", "Neutral": "Neutre",
+           "Greed": "Avidité", "Extreme Greed": "Avidité extrême"},
+    "es": {"Extreme Fear": "Miedo extremo", "Fear": "Miedo", "Neutral": "Neutral",
+           "Greed": "Codicia", "Extreme Greed": "Codicia extrema"},
+    "de": {"Extreme Fear": "Extreme Angst", "Fear": "Angst", "Neutral": "Neutral",
+           "Greed": "Gier", "Extreme Greed": "Extreme Gier"},
+    "en": {},
 }
 
 FALLBACK_MARKET = {
@@ -162,7 +205,7 @@ def _lock_for(name: str) -> threading.Lock:
 
 
 def get_markets(currency: str = "usd", max_age: float = None) -> list:
-    """Топ-60 по капитализации в нужной валюте. Кэш на CACHE_TTL сек: тысячи запросов
+    """Топ-100 по капитализации в нужной валюте. Кэш на CACHE_TTL сек: тысячи запросов
     пользователей = один запрос к CoinGecko. Пока кто-то обновляет кэш, остальные
     получают предыдущие данные; при сбое отдаётся кэш не старше STALE_MAX_SEC."""
     max_age = config.CACHE_TTL if max_age is None else max_age
@@ -179,8 +222,8 @@ def get_markets(currency: str = "usd", max_age: float = None) -> list:
             return entry["data"]
         url = (
             "https://api.coingecko.com/api/v3/coins/markets"
-            f"?vs_currency={currency}&order=market_cap_desc&per_page=60&page=1"
-            "&sparkline=false&price_change_percentage=24h,7d"
+            f"?vs_currency={currency}&order=market_cap_desc&per_page=100&page=1"
+            "&sparkline=false&price_change_percentage=1h,24h,7d"
         )
         try:
             data = fetch_json(url)
@@ -255,8 +298,11 @@ def _pool(data: list, include_stables: bool = False) -> list:
 
 
 def pick_coins(data: list, s: dict) -> list:
-    pool = _pool(data, s["include_stables"])
     n, mode = s["coins_count"], s["list_mode"]
+    if mode == "custom":  # свои монеты (из топ-100) в порядке, выбранном пользователем
+        by_id = {c["id"]: c for c in data}
+        return [by_id[i] for i in s["custom_coins"] if i in by_id]
+    pool = _pool(data, s["include_stables"])
     if mode == "top":
         return pool[:n]
     key = _change_key(s["change_period"])
@@ -272,7 +318,7 @@ def build_coin_block(data: list, s: dict) -> str:
     lab = LABELS[s["lang"]]
     key = _change_key(s["change_period"])
     title = lab[s["list_mode"]].format(n=len(coins))
-    if s["show_change"] or s["list_mode"] != "top":
+    if s["show_change"] or s["list_mode"] in ("gainers", "losers"):
         title += f" · {s['change_period']}"
     lines = []
     for i, c in enumerate(coins, start=1):
@@ -312,11 +358,18 @@ def get_recent_headlines(hours: int = 8, limit: int = 15) -> list:
 
 
 # ------------------------------------------------------------------
-# Gemini: несколько ключей и моделей, повторы, паузы при лимитах
+# Gemini: ОДИН запрос = тексты сразу на всех языках (JSON); несколько ключей и моделей
 # ------------------------------------------------------------------
 _gemini_clients: dict = {}
 _cooldown: dict = {}  # (индекс ключа, модель) -> время, до которого пропускаем (лимит 429)
 _rr = {"i": 0}
+
+JSON_TAIL = (
+    "Return ONLY a valid JSON object with exactly these keys: en, ru, fr, es, de. Each value is "
+    "the same text written naturally (not word-for-word) in that language: English, Russian, "
+    "French, Spanish, German."
+)
+TONE = "Tone: friendly and light, a touch of humor, at most 1-2 fitting emojis."
 
 
 def _client(idx: int):
@@ -325,19 +378,33 @@ def _client(idx: int):
 
     if idx not in _gemini_clients:
         _gemini_clients[idx] = genai.Client(
-            api_key=config.GEMINI_KEYS[idx], http_options=types.HttpOptions(timeout=30000))
+            api_key=config.GEMINI_KEYS[idx], http_options=types.HttpOptions(timeout=45000))
     return _gemini_clients[idx]
 
 
+def _parse_multi(raw: str) -> dict:
+    """JSON с текстами на всех языках -> {lang: text}. Бросает ValueError, если чего-то не хватает."""
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.S).strip()
+    data = json.loads(text)
+    out = {l: data[l].strip() for l in LANG_NAMES
+           if isinstance(data.get(l), str) and data[l].strip()}
+    if len(out) != len(LANG_NAMES):
+        raise ValueError("JSON has missing languages")
+    return out
+
+
 def _call_gemini(prompt: str):
-    """Пробует все ключи и модели по очереди. Возвращает сырой текст или None."""
+    """Перебирает ключи и модели; ответ должен пройти разбор JSON, иначе пробуем дальше.
+    Возвращает {lang: text} или None."""
     keys = config.GEMINI_KEYS
     if not keys:
         logger.warning("No Gemini API keys configured")
         return None
     from google.genai import types
 
-    gen_config = types.GenerateContentConfig(temperature=0.8)
+    gen_config = types.GenerateContentConfig(temperature=0.8, response_mime_type="application/json")
     deadline = time.time() + 90
     start = _rr["i"] % len(keys)
     for idx in [(start + k) % len(keys) for k in range(len(keys))]:
@@ -350,11 +417,9 @@ def _call_gemini(prompt: str):
                 try:
                     resp = _client(idx).models.generate_content(
                         model=model, contents=prompt, config=gen_config)
-                    text = (resp.text or "").strip()
-                    if not text:
-                        raise ValueError("empty response")
+                    result = _parse_multi(resp.text or "")
                     _rr["i"] = idx + 1  # следующий запрос начнём со следующего ключа
-                    return text
+                    return result
                 except Exception as e:
                     msg = str(e).replace(keys[idx], "***")
                     logger.warning("Gemini key#%d %s failed: %s", idx + 1, model, msg[:200])
@@ -375,10 +440,10 @@ def _call_gemini(prompt: str):
     return None
 
 
-_recent_facts: dict = collections.defaultdict(lambda: collections.deque(maxlen=12))
+_recent_facts: collections.deque = collections.deque(maxlen=12)
 
 
-def _gen_analysis(lang: str):
+def _gen_analysis():
     try:
         data = get_markets("usd")
     except Exception:
@@ -394,38 +459,37 @@ def _gen_analysis(lang: str):
     headlines = get_recent_headlines()
     news = ("Recent headlines:\n- " + "\n- ".join(headlines)
             if headlines else "There are no notable headlines in the last hours.")
-    name = LANG_NAMES[lang]
     prompt = (
-        f"You are a friendly crypto analyst writing a short Telegram update in {name}.\n"
+        "You are a friendly crypto analyst writing a short Telegram update.\n"
         f"Top coins, 24h change: {top_line}\n"
-        f"Biggest 24h movers among the top 60: {movers or 'n/a'}\n"
+        f"Biggest 24h movers among the top 100: {movers or 'n/a'}\n"
         f"Overall the top-10 market is {trend}, {avg:+.2f}% on average over 24h.\n{news}\n\n"
         "TASK: write 2-3 sentences of market analysis. If the headlines contain IMPORTANT events "
         "(hacks, laws, court cases, ETFs, big moves), explain what happened and how it may affect "
         "the market; never invent anything that is not in the headlines or the data above. If there "
         "is no important news, say briefly that the news background is quiet and comment on the "
-        "market mood using the numbers above.\n"
-        f"No greetings, no markdown, no buy/sell advice. Write ONLY in {name}."
+        f"market mood using the numbers above.\nNo greetings, no markdown, no buy/sell advice. {TONE}\n"
+        + JSON_TAIL
     )
-    raw = _call_gemini(prompt)
-    return f"{LABELS[lang]['ai']}\n{to_telegram_html(raw)}" if raw else None
+    texts = _call_gemini(prompt)
+    if not texts:
+        return None
+    return {l: f"{LABELS[l]['ai']}\n{to_telegram_html(t)}" for l, t in texts.items()}
 
 
-def _gen_fact(lang: str):
-    name = LANG_NAMES[lang]
-    recent = " | ".join(_recent_facts[lang]) or "none"
+def _gen_fact():
+    recent = " | ".join(_recent_facts) or "none"
     prompt = (
         f"Write ONE little-known, verifiable fact about \"{random.choice(FACT_TOPICS)}\" in the "
-        f"world of cryptocurrency, in {name}: 2-3 sentences, friendly tone for a Telegram channel. "
-        "Do not invent numbers, dates or names; if you are not sure about a detail, leave it out. "
-        "No greetings, no markdown, no emoji.\n"
-        f"Do not repeat or paraphrase these recent facts: {recent}"
+        "world of cryptocurrency: 2-3 sentences for a Telegram channel. Do not invent numbers, "
+        "dates or names; if you are not sure about a detail, leave it out. No greetings, no "
+        f"markdown. {TONE}\nDo not repeat or paraphrase these recent facts: {recent}\n" + JSON_TAIL
     )
-    raw = _call_gemini(prompt)
-    if not raw:
+    texts = _call_gemini(prompt)
+    if not texts:
         return None
-    _recent_facts[lang].append(raw[:90])
-    return f"{LABELS[lang]['fact']}\n{to_telegram_html(raw)}"
+    _recent_facts.append(texts["en"][:90])
+    return {l: f"{LABELS[l]['fact']}\n{to_telegram_html(t)}" for l, t in texts.items()}
 
 
 def fallback_text(kind: str, lang: str):
@@ -445,56 +509,55 @@ def fallback_text(kind: str, lang: str):
     return f"{LABELS[lang]['ai']}\n" + FALLBACK_MARKET[lang].format(avg=sum(ch) / len(ch))
 
 
-_ai_cache: dict = {}  # (kind, lang) -> (время, текст)
+_ai_cache: dict = {}  # kind -> (время, {язык: текст})
 _ai_fail_until: dict = {}
 _ai_warming: set = set()
 
 
-def _warm_async(kind: str, lang: str) -> None:
-    key = (kind, lang)
-    if key in _ai_warming:
+def _warm_async(kind: str) -> None:
+    if kind in _ai_warming:
         return
-    _ai_warming.add(key)
+    _ai_warming.add(kind)
 
     def run():
         try:
-            get_ai_text(kind, lang)
+            get_ai_text(kind, "en")
         finally:
-            _ai_warming.discard(key)
+            _ai_warming.discard(kind)
 
-    threading.Thread(target=run, daemon=True, name=f"ai-warm-{kind}-{lang}").start()
+    threading.Thread(target=run, daemon=True, name=f"ai-warm-{kind}").start()
 
 
 def get_ai_text(kind: str, lang: str, force: bool = False, cached_only: bool = False):
-    """kind: 'analysis' | 'fact'. Генерируется раз в час на язык и кэшируется.
-    Цепочка: свежий кэш -> Gemini (все ключи/модели) -> прошлый текст (до AI_STALE_HOURS ч) ->
-    запасной текст. cached_only=True никогда не ждёт Gemini."""
-    key = (kind, lang)
+    """kind: 'analysis' | 'fact'. Один запрос к Gemini в час даёт тексты на всех языках, они
+    кэшируются, а каждому пользователю отдаётся его язык.
+    Цепочка: свежий кэш -> Gemini -> прошлый текст (до AI_STALE_HOURS ч) -> запасной текст.
+    cached_only=True никогда не ждёт Gemini."""
     fresh_age = config.AI_CACHE_MIN * 60
     stale_age = config.AI_STALE_HOURS * 3600
-    entry = _ai_cache.get(key)
+    entry = _ai_cache.get(kind)
 
     if cached_only:
         if entry is None:
-            _warm_async(kind, lang)  # кэша ещё нет (свежий запуск): греем в фоне
-        elif time.time() - entry[0] < stale_age:
-            return entry[1]
+            _warm_async(kind)  # кэша ещё нет (свежий запуск): греем в фоне
+        elif time.time() - entry[0] < stale_age and entry[1].get(lang):
+            return entry[1][lang]
         return fallback_text(kind, lang)
 
-    if entry and not force and time.time() - entry[0] < fresh_age:
-        return entry[1]
-    with _lock_for(f"ai:{kind}:{lang}"):
-        entry = _ai_cache.get(key)
-        if entry and not force and time.time() - entry[0] < fresh_age:
-            return entry[1]
-        if force or time.time() >= _ai_fail_until.get(key, 0):
-            text = _gen_fact(lang) if kind == "fact" else _gen_analysis(lang)
-            if text:
-                _ai_cache[key] = (time.time(), text)
-                return text
-            _ai_fail_until[key] = time.time() + 120  # не долбим Gemini при сбое
-        if entry and time.time() - entry[0] < stale_age:
-            return entry[1]
+    if entry and not force and time.time() - entry[0] < fresh_age and entry[1].get(lang):
+        return entry[1][lang]
+    with _lock_for("ai:" + kind):
+        entry = _ai_cache.get(kind)
+        if entry and not force and time.time() - entry[0] < fresh_age and entry[1].get(lang):
+            return entry[1][lang]
+        if force or time.time() >= _ai_fail_until.get(kind, 0):
+            texts = _gen_fact() if kind == "fact" else _gen_analysis()
+            if texts:
+                _ai_cache[kind] = (time.time(), texts)
+                return texts.get(lang) or fallback_text(kind, lang)
+            _ai_fail_until[kind] = time.time() + 120  # не долбим Gemini при сбое
+        if entry and time.time() - entry[0] < stale_age and entry[1].get(lang):
+            return entry[1][lang]
         return fallback_text(kind, lang)
 
 
@@ -502,8 +565,101 @@ def cache_info() -> dict:
     now = time.time()
     return {
         "markets": {k: int(now - v["ts"]) for k, v in _mcache.items()},
-        "ai": {f"{k[0]}:{k[1]}": int(now - v[0]) for k, v in _ai_cache.items()},
+        "ai": {k: int(now - v[0]) for k, v in _ai_cache.items()},
     }
+
+
+# ------------------------------------------------------------------
+# Fear & Greed, доминирование BTC, настроение рынка
+# ------------------------------------------------------------------
+_idx_cache: dict = {"ts": 0.0, "data": {}}
+
+
+def get_indices(max_age: float = None) -> dict:
+    """{'fng': (значение, класс) | None, 'dom': доля BTC в % | None}. Сбой одного источника
+    не мешает отчёту: недостающая часть просто не показывается."""
+    max_age = config.INDICES_TTL if max_age is None else max_age
+    if _idx_cache["data"] and time.time() - _idx_cache["ts"] < max_age:
+        return _idx_cache["data"]
+    with _lock_for("idx"):
+        if _idx_cache["data"] and time.time() - _idx_cache["ts"] < max_age:
+            return _idx_cache["data"]
+        fng = dom = None
+        try:
+            d = fetch_json("https://api.alternative.me/fng/?limit=1", retries=2)["data"][0]
+            fng = (int(d["value"]), str(d["value_classification"]))
+        except Exception as e:
+            logger.warning("Fear & Greed unavailable: %s", e)
+        try:
+            dom = float(fetch_json("https://api.coingecko.com/api/v3/global",
+                                   retries=2)["data"]["market_cap_percentage"]["btc"])
+        except Exception as e:
+            logger.warning("BTC dominance unavailable: %s", e)
+        if fng or dom is not None:
+            _idx_cache.update(ts=time.time(), data={"fng": fng, "dom": dom})
+        return _idx_cache["data"]
+
+
+def indices_line(lang: str) -> str:
+    try:
+        idx = get_indices()
+    except Exception:
+        return ""
+    lab, parts = LABELS[lang], []
+    if idx.get("fng"):
+        value, cls = idx["fng"]
+        parts.append(f"🌡 {lab['fng']}: <b>{value}</b> "
+                     f"({html.escape(FNG_CLASS[lang].get(cls, cls), quote=False)})")
+    if idx.get("dom") is not None:
+        parts.append(f"₿ {lab['dom']}: <b>{idx['dom']:.1f}%</b>")
+    return " · ".join(parts)
+
+
+def mood_line(data: list, lang: str) -> str:
+    ch = [c.get("price_change_percentage_24h_in_currency") for c in _pool(data)[:10]]
+    ch = [c for c in ch if c is not None]
+    if not ch:
+        return ""
+    avg = sum(ch) / len(ch)
+    level = 0 if avg >= 3 else 1 if avg >= 1 else 2 if avg > -1 else 3 if avg > -3 else 4
+    return MOOD[lang][level]
+
+
+def top_coins_snapshot(data: list) -> list:
+    """Список топ-100 для выбора «своих монет» в мини-приложении."""
+    return [{"id": c["id"], "symbol": c["symbol"].upper(), "name": c.get("name", "")} for c in data]
+
+
+# ------------------------------------------------------------------
+# Алерты о резких движениях (изменение за 1 час)
+# ------------------------------------------------------------------
+def find_movers(data: list, min_pct: float) -> dict:
+    """{coin_id: (символ, изменение за 1ч %)} для монет, изменившихся не меньше min_pct."""
+    out = {}
+    for c in data:
+        ch = c.get("price_change_percentage_1h_in_currency")
+        if ch is not None and abs(ch) >= min_pct:
+            out[c["id"]] = (c["symbol"].upper(), ch)
+    return out
+
+
+def alert_scope(s: dict, data: list) -> list:
+    """За какими монетами следим: свои (режим «Мои монеты») или топ-10 по капитализации."""
+    if s["list_mode"] == "custom":
+        return s["custom_coins"]
+    return [c["id"] for c in _pool(data)[:10]]
+
+
+def build_alert_text(s: dict, hits: list, price_data: list) -> str:
+    """hits: [(coin_id, символ, изменение %)]."""
+    lab = LABELS[s["lang"]]
+    prices = {c["id"]: c.get("current_price") for c in price_data}
+    lines = []
+    for coin_id, sym, ch in hits:
+        arrow = "📈" if ch > 0 else "📉"
+        lines.append(f"{arrow} <b>{html.escape(sym)}</b> {ch:+.1f}% {lab['alert_per']} · "
+                     f"{fmt_price(prices.get(coin_id), s['currency'])}")
+    return lab["alert_hdr"] + "\n\n" + "\n".join(lines)
 
 
 # ------------------------------------------------------------------
@@ -511,17 +667,26 @@ def cache_info() -> dict:
 # ------------------------------------------------------------------
 def compose(s: dict, want_report: bool, want_analytics: bool, want_facts: bool = False,
             now: datetime = None, ai_cached_only: bool = False):
-    """Текст сообщения для пользователя или None, если показывать нечего."""
+    """Текст сообщения или None. Аналитика и факт никогда не идут вместе:
+    если пора аналитике, факт пропускается."""
+    if want_analytics:
+        want_facts = False
     now = now or datetime.now(timezone.utc)
     lang = s["lang"]
     lab = LABELS[lang]
     local = now.astimezone(ZoneInfo(s["tz"])).strftime("%d.%m.%Y %H:%M")
     parts, has_report = [], False
     if want_report:
-        block = build_coin_block(get_markets(s["currency"]), s)
+        data = get_markets(s["currency"])
+        block = build_coin_block(data, s)
         if block:
-            parts.append(block)
+            mood = mood_line(data, lang)
+            parts.append((f"<i>{mood}</i>\n\n" if mood else "") + block)
             has_report = True
+            if s["show_indices"]:
+                line = indices_line(lang)
+                if line:
+                    parts.append(line)
     if want_analytics:
         text = get_ai_text("analysis", lang, cached_only=ai_cached_only)
         if text:
@@ -534,3 +699,4 @@ def compose(s: dict, want_report: bool, want_analytics: bool, want_facts: bool =
         return None
     header = lab["hdr_market" if has_report else "hdr_digest"].format(time=local)
     return header + "\n\n" + "\n\n".join(parts)
+

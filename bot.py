@@ -1,6 +1,7 @@
 """Telegram-бот: команды, персональное расписание рассылки, админ-инструменты."""
 import collections
 import html
+import json
 import logging
 import re
 import signal
@@ -18,6 +19,7 @@ import alerts
 import config
 import db
 import market as M
+import settings as S
 
 config.setup_logging("bot")
 logger = logging.getLogger("bot")
@@ -43,7 +45,7 @@ T = {
     "en": {
         "start": "👋 <b>Hi!</b> I send top-coin prices, AI analytics and fun crypto facts.\n\n{summary}\n\n"
                  "Everything is configurable via the “⚙️ Settings” button.",
-        "rep": "📬 Prices", "ana": "🧠 Analytics", "fact": "💡 Facts",
+        "rep": "📬 Prices", "ana": "🧠 Analytics", "fact": "💡 Facts", "al": "🚨 Alerts",
         "every": "every {n} h", "off": "off", "reports_off": "🔕 Reports are off",
         "stop": "🔕 Reports are off. Turn on: /start or “⚙️ Settings”.",
         "settings": "Open the bot settings:",
@@ -58,7 +60,7 @@ T = {
     "ru": {
         "start": "👋 <b>Привет!</b> Я присылаю курс топ-монет, AI-аналитику и интересные факты о крипте.\n\n"
                  "{summary}\n\nВсё настраивается кнопкой «⚙️ Настройки».",
-        "rep": "📬 Курс", "ana": "🧠 Аналитика", "fact": "💡 Факты",
+        "rep": "📬 Курс", "ana": "🧠 Аналитика", "fact": "💡 Факты", "al": "🚨 Алерты",
         "every": "каждые {n} ч", "off": "выключено", "reports_off": "🔕 Рассылка выключена",
         "stop": "🔕 Рассылка отключена. Вернуть: /start или «⚙️ Настройки».",
         "settings": "Откройте настройки бота:",
@@ -73,7 +75,7 @@ T = {
     "fr": {
         "start": "👋 <b>Salut !</b> J’envoie les cours des principales cryptos, des analyses IA et des "
                  "anecdotes crypto.\n\n{summary}\n\nTout se règle via le bouton « ⚙️ Paramètres ».",
-        "rep": "📬 Cours", "ana": "🧠 Analyse", "fact": "💡 Anecdotes",
+        "rep": "📬 Cours", "ana": "🧠 Analyse", "fact": "💡 Anecdotes", "al": "🚨 Alertes",
         "every": "toutes les {n} h", "off": "désactivé", "reports_off": "🔕 Envois désactivés",
         "stop": "🔕 Envois désactivés. Pour réactiver : /start ou « ⚙️ Paramètres ».",
         "settings": "Ouvrez les paramètres du bot :",
@@ -88,7 +90,7 @@ T = {
     "es": {
         "start": "👋 <b>¡Hola!</b> Envío precios de las principales criptomonedas, análisis con IA y "
                  "datos curiosos.\n\n{summary}\n\nTodo se configura con el botón «⚙️ Ajustes».",
-        "rep": "📬 Precios", "ana": "🧠 Análisis", "fact": "💡 Datos curiosos",
+        "rep": "📬 Precios", "ana": "🧠 Análisis", "fact": "💡 Datos curiosos", "al": "🚨 Alertas",
         "every": "cada {n} h", "off": "desactivado", "reports_off": "🔕 Envíos desactivados",
         "stop": "🔕 Envíos desactivados. Para volver: /start o «⚙️ Ajustes».",
         "settings": "Abre los ajustes del bot:",
@@ -103,7 +105,7 @@ T = {
     "de": {
         "start": "👋 <b>Hallo!</b> Ich sende Kurse der Top-Coins, KI-Analysen und spannende Krypto-Fakten."
                  "\n\n{summary}\n\nAlles lässt sich über die Schaltfläche „⚙️ Einstellungen“ anpassen.",
-        "rep": "📬 Kurse", "ana": "🧠 Analyse", "fact": "💡 Fakten",
+        "rep": "📬 Kurse", "ana": "🧠 Analyse", "fact": "💡 Fakten", "al": "🚨 Alarme",
         "every": "alle {n} Std.", "off": "aus", "reports_off": "🔕 Versand ist aus",
         "stop": "🔕 Versand ist aus. Wieder einschalten: /start oder „⚙️ Einstellungen“.",
         "settings": "Bot-Einstellungen öffnen:",
@@ -139,6 +141,7 @@ def summary(s: dict) -> str:
         line(t["rep"], True, s["report_interval"]),
         line(t["ana"], s["analytics_enabled"], s["analytics_interval"]),
         line(t["fact"], s["facts_enabled"], s["facts_interval"]),
+        f"{t['al']}: " + (f"≥{s['move_threshold']}%" if s["move_alerts"] else t["off"]),
     ])
 
 
@@ -290,16 +293,20 @@ def _sleep_until(target: datetime) -> bool:
 def prepare(force_ai: bool) -> None:
     try:
         currencies, ana_langs, fact_langs = db.active_currencies_langs()
-        for cur in currencies:
+        for cur in sorted(set(currencies) | {"usd"}):
             try:
-                M.get_markets(cur, max_age=0)
+                data = M.get_markets(cur, max_age=0)
+                if cur == "usd":  # список топ-100 для выбора «своих монет» в мини-приложении
+                    db.set_meta("top_coins", json.dumps(M.top_coins_snapshot(data), ensure_ascii=False))
             except Exception as e:
                 logger.error("Prepare: market data unavailable (%s): %s", cur, e)
             time.sleep(2)
-        for lang in ana_langs:
-            M.get_ai_text("analysis", lang, force=force_ai)
-        for lang in fact_langs:
-            M.get_ai_text("fact", lang, force=force_ai)
+        M.get_indices(max_age=0)
+        # один запрос к Gemini на вид текста — сразу на всех языках
+        if ana_langs:
+            M.get_ai_text("analysis", ana_langs[0], force=force_ai)
+        if fact_langs:
+            M.get_ai_text("fact", fact_langs[0], force=force_ai)
     except Exception:
         logger.exception("Prepare step failed")
 
@@ -317,6 +324,61 @@ def prepare_loop() -> None:
         prepare(force_ai=(t.minute == 58))
 
 
+def check_moves() -> None:
+    """Ищет резкие движения за 1 час и шлёт пользователям алерты по их монетам."""
+    try:
+        data = M.get_markets("usd", max_age=0)
+    except Exception as e:
+        logger.warning("Move check skipped, no market data: %s", e)
+        return
+    movers = M.find_movers(data, 3.0)  # 3% — минимальный порог из настроек
+    if not movers:
+        return
+    now = datetime.now(timezone.utc)
+    last_id, sent = 0, 0
+    with ThreadPoolExecutor(max_workers=config.BROADCAST_WORKERS) as ex:
+        while True:
+            users = db.alert_users(last_id, 500)
+            if not users:
+                break
+            last_id = users[-1][0]
+            cooled = db.recent_alerts([u[0] for u in users], config.ALERT_COOLDOWN_MIN)
+            items, marks = [], []
+            for chat_id, s in users:
+                if not S.is_allowed_now(s, now):
+                    continue
+                hits = []
+                for coin_id in M.alert_scope(s, data):
+                    m = movers.get(coin_id)
+                    if m and abs(m[1]) >= s["move_threshold"] and (chat_id, coin_id) not in cooled:
+                        hits.append((coin_id, m[0], m[1]))
+                if not hits:
+                    continue
+                try:
+                    price_data = M.get_markets(s["currency"])
+                except Exception:
+                    continue
+                items.append((chat_id, M.build_alert_text(s, hits, price_data), s["lang"], False))
+                marks.append([(chat_id, h[0]) for h in hits])
+            if items:
+                results = list(ex.map(deliver, items))
+                db.mark_alerts([pair for res, pairs in zip(results, marks) if res == "ok" for pair in pairs])
+                sent += sum(1 for r in results if r == "ok")
+    if sent:
+        count("alerts_sent", sent)
+        logger.info("Move alerts sent: %s", sent)
+
+
+def moves_loop() -> None:
+    stop.wait(90)  # даём боту прогреться после старта
+    while not stop.is_set():
+        try:
+            check_moves()
+        except Exception:
+            logger.exception("Move check failed")
+        stop.wait(config.MOVE_CHECK_MIN * 60)
+
+
 def heartbeat_loop() -> None:
     tz = ZoneInfo(config.DEFAULT_TZ)
     while not stop.is_set():
@@ -326,6 +388,7 @@ def heartbeat_loop() -> None:
             today = now.date().isoformat()
             if now.hour >= config.DIGEST_HOUR and db.get_meta("last_digest") != today:
                 db.set_meta("last_digest", today)
+                db.cleanup()
                 send_digest()
         except Exception:
             logger.exception("Heartbeat failed")
@@ -342,7 +405,8 @@ def stats_text() -> str:
         f"💡 С фактами: {st['facts']}\n🌐 Языки: {st['langs'] or '—'}\n\n"
         f"📤 С момента запуска: отправлено {c.get('sent_ok', 0)}, "
         f"заблокировано {c.get('sent_blocked', 0)}, ошибок {c.get('sent_error', 0)}, "
-        f"пропусков (нет данных) {c.get('skipped_no_data', 0)}"
+        f"пропусков (нет данных) {c.get('skipped_no_data', 0)}, "
+        f"алертов о движениях {c.get('alerts_sent', 0)}"
     )
 
 
@@ -356,8 +420,8 @@ def send_digest() -> None:
 # Команды пользователя
 # ------------------------------------------------------------------
 def prices_text(s: dict) -> str:
-    """Курс + (если включены) закэшированные аналитика и факт — без ожидания Gemini."""
-    return M.compose(s, True, s["analytics_enabled"], s["facts_enabled"], ai_cached_only=True)
+    """Курс + (если включена) закэшированная аналитика — без ожидания Gemini."""
+    return M.compose(s, True, s["analytics_enabled"], False, ai_cached_only=True)
 
 
 def handle_start(message) -> None:
@@ -554,6 +618,7 @@ def main() -> None:
         threading.Thread(target=dispatcher_loop, name="dispatcher"),
         threading.Thread(target=prepare_loop, name="prepare"),
         threading.Thread(target=heartbeat_loop, name="heartbeat"),
+        threading.Thread(target=moves_loop, name="moves"),
     ]
     for th in threads:
         th.start()

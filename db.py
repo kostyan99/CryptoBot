@@ -43,12 +43,23 @@ MIGRATIONS = [
         value TEXT NOT NULL
     );
     """,
+    # 2: отдельное расписание «интересных фактов»
     """
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS next_facts_at TIMESTAMPTZ;
-    CREATE INDEX IF NOT EXISTS users_due_facts_idx
+    ALTER TABLE users ADD COLUMN next_facts_at TIMESTAMPTZ;
+    UPDATE users SET next_facts_at = date_trunc('hour', now()) + interval '1 hour';
+    CREATE INDEX users_due_facts_idx
         ON users (next_facts_at)
         WHERE subscribed AND NOT blocked AND next_facts_at IS NOT NULL;
+    """,
+    # 3: антидубли алертов о резких движениях
     """
+    CREATE TABLE move_alerts (
+        chat_id BIGINT NOT NULL REFERENCES users(chat_id) ON DELETE CASCADE,
+        coin_id TEXT   NOT NULL,
+        sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (chat_id, coin_id)
+    );
+    """,
 ]
 
 
@@ -70,21 +81,6 @@ def init_db() -> None:
                 conn.execute("INSERT INTO schema_version (version) VALUES (%s)", (number,))
 
 
-def guess_lang(code) -> str:
-    if not code:
-        return "en"
-    code = code.lower()
-    if code.startswith(("ru", "uk", "be")):
-        return "ru"
-    if code.startswith("fr"):
-        return "fr"
-    if code.startswith("es"):
-        return "es"
-    if code.startswith("de"):
-        return "de"
-    return "en"
-
-
 def _public(stored: dict, subscribed: bool) -> dict:
     s = S.merged(stored)
     s["enabled"] = bool(subscribed)
@@ -92,20 +88,20 @@ def _public(stored: dict, subscribed: bool) -> dict:
 
 
 def ensure_user(chat_id: int, user=None, subscribe=None, touch: bool = True) -> State:
+    """Создаёт пользователя при первом обращении (настройки по умолчанию, язык — английский).
+    subscribe=True включает рассылку (команда /start)."""
     now = _now()
-    lang = guess_lang(getattr(user, "language_code", None))
     username = getattr(user, "username", None)
     first_name = getattr(user, "first_name", None)
-    init = S.merged({"lang": lang})
-    nr0, na0, nf0 = S.compute_next(init, now)
+    nr0, na0, nf0 = S.compute_next(S.merged({}), now)
 
     with pool.connection() as conn:
         conn.execute(
             """
             INSERT INTO users (chat_id, settings, next_report_at, next_analytics_at, next_facts_at)
-            VALUES (%s, %s, %s, %s, %s) ON CONFLICT (chat_id) DO NOTHING
+            VALUES (%s, '{}'::jsonb, %s, %s, %s) ON CONFLICT (chat_id) DO NOTHING
             """,
-            (chat_id, Jsonb({"lang": lang}), nr0, na0, nf0),
+            (chat_id, nr0, na0, nf0),
         )
         stored, subscribed, nr, na, nf = conn.execute(
             "SELECT settings, subscribed, next_report_at, next_analytics_at, next_facts_at "
@@ -113,8 +109,7 @@ def ensure_user(chat_id: int, user=None, subscribe=None, touch: bool = True) -> 
             (chat_id,),
         ).fetchone()
         s = S.merged(stored)
-        resubscribe = bool(subscribe) and not subscribed
-        if resubscribe:
+        if bool(subscribe) and not subscribed:
             subscribed = True
             nr, na, nf = S.compute_next(s, now)
         conn.execute(
@@ -149,6 +144,8 @@ def get_state(chat_id: int):
 
 
 def save_settings(chat_id: int, partial: dict) -> State:
+    """Валидирует и сохраняет настройки, пересчитывает расписание.
+    ValueError — некорректные данные, KeyError — пользователя нет."""
     clean = S.validate_partial(partial)
     enabled_new = clean.pop("enabled", None)
     with pool.connection() as conn:
@@ -172,13 +169,12 @@ def save_settings(chat_id: int, partial: dict) -> State:
 
 
 def set_subscribed(chat_id: int, value: bool) -> None:
-    state = get_state(chat_id)
-    if state is None:
-        return
-    save_settings(chat_id, {"enabled": value})
+    if get_state(chat_id) is not None:
+        save_settings(chat_id, {"enabled": value})
 
 
 def request_send_now(chat_id: int) -> bool:
+    """Просит планировщик отправить всё сейчас (в обход тихих часов/дней)."""
     with pool.connection() as conn:
         cur = conn.execute(
             "UPDATE users SET next_report_at = now(), force_send = TRUE "
@@ -199,14 +195,12 @@ def delete_user(chat_id: int) -> None:
 
 
 def seed_users(chat_ids: list) -> None:
-    now = _now()
-    init = S.merged({})
-    nr, na, nf = S.compute_next(init, now)
+    nr, na, nf = S.compute_next(S.merged({}), _now())
     with pool.connection() as conn:
         for chat_id in chat_ids:
             conn.execute(
-                "INSERT INTO users (chat_id, settings, next_report_at, next_analytics_at, next_facts_at) "
-                "VALUES (%s, '{}'::jsonb, %s, %s, %s) ON CONFLICT (chat_id) DO NOTHING",
+                "INSERT INTO users (chat_id, settings, next_report_at, next_analytics_at, "
+                "next_facts_at) VALUES (%s, '{}'::jsonb, %s, %s, %s) ON CONFLICT (chat_id) DO NOTHING",
                 (chat_id, nr, na, nf),
             )
 
@@ -234,34 +228,39 @@ def get_stats() -> dict:
                    count(*) FILTER (WHERE subscribed AND NOT blocked),
                    count(*) FILTER (WHERE blocked),
                    count(*) FILTER (WHERE subscribed AND NOT blocked
-                                    AND COALESCE((settings->>'analytics_enabled')::boolean, TRUE))
+                                    AND COALESCE((settings->>'analytics_enabled')::boolean, TRUE)),
+                   count(*) FILTER (WHERE subscribed AND NOT blocked
+                                    AND COALESCE((settings->>'facts_enabled')::boolean, TRUE))
             FROM users
             """
         ).fetchone()
-    return {"total": row[0], "active": row[1], "blocked": row[2], "analytics": row[3]}
+        langs = conn.execute(
+            "SELECT COALESCE(settings->>'lang', 'en'), count(*) FROM users "
+            "WHERE subscribed AND NOT blocked GROUP BY 1 ORDER BY 2 DESC"
+        ).fetchall()
+    return {"total": row[0], "active": row[1], "blocked": row[2], "analytics": row[3],
+            "facts": row[4], "langs": {k: v for k, v in langs}}
 
 
 def active_currencies_langs() -> tuple:
-    """Возвращает (валюты, языки для аналитики, языки для фактов) активных пользователей."""
+    """(валюты активных пользователей, языки с аналитикой, языки с фактами) — для прогрева кэша."""
     with pool.connection() as conn:
         cur = conn.execute(
             "SELECT DISTINCT COALESCE(settings->>'currency', 'usd') "
             "FROM users WHERE subscribed AND NOT blocked"
         ).fetchall()
-        
-        ana_lng = conn.execute(
+        ana = conn.execute(
             "SELECT DISTINCT COALESCE(settings->>'lang', 'en') FROM users "
             "WHERE subscribed AND NOT blocked "
             "AND COALESCE((settings->>'analytics_enabled')::boolean, TRUE)"
         ).fetchall()
-        
-        fact_lng = conn.execute(
+        fact = conn.execute(
             "SELECT DISTINCT COALESCE(settings->>'lang', 'en') FROM users "
             "WHERE subscribed AND NOT blocked "
             "AND COALESCE((settings->>'facts_enabled')::boolean, TRUE)"
         ).fetchall()
-        
-    return [r[0] for r in cur], [r[0] for r in ana_lng], [r[0] for r in fact_lng]
+    return [r[0] for r in cur], [r[0] for r in ana], [r[0] for r in fact]
+
 
 def active_ids(after_id: int, limit: int = 1000) -> list:
     with pool.connection() as conn:
@@ -274,6 +273,9 @@ def active_ids(after_id: int, limit: int = 1000) -> list:
 
 
 def claim_due(limit: int) -> tuple:
+    """Атомарно забирает пачку пользователей, у которых наступил слот отчёта, аналитики и/или
+    факта, сдвигает им расписание и возвращает задания на отправку.
+    Возвращает (jobs, claimed_count, max_lag_seconds)."""
     now = _now()
     grace = config.LATE_GRACE_MIN * 60
     jobs, updates, max_lag, claimed = [], [], 0.0, 0
@@ -283,7 +285,8 @@ def claim_due(limit: int) -> tuple:
             SELECT chat_id, settings, next_report_at, next_analytics_at, next_facts_at, force_send
             FROM users
             WHERE subscribed AND NOT blocked
-              AND (next_report_at <= %(now)s OR next_analytics_at <= %(now)s OR next_facts_at <= %(now)s)
+              AND (next_report_at <= %(now)s OR next_analytics_at <= %(now)s
+                   OR next_facts_at <= %(now)s)
             ORDER BY LEAST(next_report_at, next_analytics_at, next_facts_at)
             LIMIT %(limit)s
             FOR UPDATE SKIP LOCKED
@@ -293,35 +296,37 @@ def claim_due(limit: int) -> tuple:
         for chat_id, stored, nr, na, nf, force in rows:
             claimed += 1
             s = S.merged(stored)
-            report_due = nr is not None and nr <= now
-            ana_due = s["analytics_enabled"] and na is not None and na <= now
-            facts_due = s["facts_enabled"] and nf is not None and nf <= now
 
-            want_r, want_a, want_f = report_due, ana_due, facts_due
+            def nxt(key):
+                return S.next_slot(now, s["tz"], s[key], s["anchor_hour"])
+
+            due_r = nr is not None and nr <= now
+            due_a = s["analytics_enabled"] and na is not None and na <= now
+            due_f = s["facts_enabled"] and nf is not None and nf <= now
             new_nr = nr
-            new_na = na if s["analytics_enabled"] else None
-            new_nf = nf if s["facts_enabled"] else None
+            new_na = (na if na is not None else nxt("analytics_interval")) if s["analytics_enabled"] else None
+            new_nf = (nf if nf is not None else nxt("facts_interval")) if s["facts_enabled"] else None
+            want_r, want_a, want_f = due_r, due_a, due_f
 
-            if report_due:
+            if due_r:
                 lag = (now - nr).total_seconds()
                 max_lag = max(max_lag, lag)
-                new_nr = S.next_slot(now, s["tz"], s["report_interval"], s["anchor_hour"])
-                want_r = lag <= grace
-            if ana_due:
+                new_nr, want_r = nxt("report_interval"), lag <= grace
+            if due_a:
                 lag = (now - na).total_seconds()
                 max_lag = max(max_lag, lag)
-                new_na = S.next_slot(now, s["tz"], s["analytics_interval"], s["anchor_hour"])
-                want_a = lag <= grace
-            if facts_due:
+                new_na, want_a = nxt("analytics_interval"), lag <= grace
+            if due_f:
                 lag = (now - nf).total_seconds()
                 max_lag = max(max_lag, lag)
-                new_nf = S.next_slot(now, s["tz"], s["facts_interval"], s["anchor_hour"])
-                want_f = lag <= grace
+                new_nf, want_f = nxt("facts_interval"), lag <= grace
 
             if force:
                 want_r, want_a, want_f = True, s["analytics_enabled"], s["facts_enabled"]
             elif (want_r or want_a or want_f) and not S.is_allowed_now(s, now):
                 want_r = want_a = want_f = False
+            if want_a:
+                want_f = False  # аналитика и факт не приходят вместе: в слот аналитики — только она
 
             if want_r or want_a or want_f:
                 jobs.append(Job(chat_id, s, want_r, want_a, want_f))
@@ -335,3 +340,45 @@ def claim_due(limit: int) -> tuple:
                     updates,
                 )
     return jobs, claimed, max_lag
+
+
+def alert_users(after_id: int, limit: int = 500) -> list:
+    """Пользователи с включёнными алертами о резких движениях: [(chat_id, settings)]."""
+    with pool.connection() as conn:
+        rows = conn.execute(
+            "SELECT chat_id, settings FROM users WHERE subscribed AND NOT blocked "
+            "AND COALESCE((settings->>'move_alerts')::boolean, TRUE) AND chat_id > %s "
+            "ORDER BY chat_id LIMIT %s",
+            (after_id, limit),
+        ).fetchall()
+    return [(r[0], S.merged(r[1])) for r in rows]
+
+
+def recent_alerts(chat_ids: list, minutes: int) -> set:
+    """{(chat_id, coin_id)}, по которым алерт уже отправляли в последние `minutes` минут."""
+    if not chat_ids:
+        return set()
+    with pool.connection() as conn:
+        rows = conn.execute(
+            "SELECT chat_id, coin_id FROM move_alerts WHERE chat_id = ANY(%s) "
+            "AND sent_at > now() - make_interval(mins => %s)",
+            (chat_ids, minutes),
+        ).fetchall()
+    return {(r[0], r[1]) for r in rows}
+
+
+def mark_alerts(pairs: list) -> None:
+    if not pairs:
+        return
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO move_alerts (chat_id, coin_id) VALUES (%s, %s) "
+                "ON CONFLICT (chat_id, coin_id) DO UPDATE SET sent_at = now()",
+                pairs,
+            )
+
+
+def cleanup() -> None:
+    with pool.connection() as conn:
+        conn.execute("DELETE FROM move_alerts WHERE sent_at < now() - interval '2 days'")

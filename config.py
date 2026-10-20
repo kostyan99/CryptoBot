@@ -50,6 +50,9 @@ BROADCAST_WORKERS = _int("BROADCAST_WORKERS", 8)
 BOT_THREADS = _int("BOT_THREADS", 16)
 DB_POOL_MAX = _int("DB_POOL_MAX", 20)
 WEB_AUTH_MAX_AGE = _int("WEB_AUTH_MAX_AGE", 86400)  # возраст initData мини-приложения
+MOVE_CHECK_MIN = _int("MOVE_CHECK_MIN", 10)  # как часто проверять резкие движения, минуты
+ALERT_COOLDOWN_MIN = _int("ALERT_COOLDOWN_MIN", 180)  # повторный алерт по той же монете не раньше
+INDICES_TTL = _int("INDICES_TTL", 600)  # кэш Fear & Greed и доминирования BTC, секунды
 DIGEST_HOUR = _int("DIGEST_HOUR", 9)  # час ежедневного дайджеста админу (DEFAULT_TZ)
 
 

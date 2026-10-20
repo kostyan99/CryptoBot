@@ -105,6 +105,7 @@ def payload(state) -> dict:
         "next_facts_at": _iso(state.next_facts_at),
     }
 
+
 def top_coins() -> list:
     """Список топ-100 монет для выбора (его пишет бот в таблицу meta)."""
     try:

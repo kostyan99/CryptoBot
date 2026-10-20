@@ -37,6 +37,7 @@ SPEC = {
     "days": {"type": "days"},
 }
 
+# "enabled" хранится отдельной колонкой subscribed, остальное — в JSONB
 DEFAULTS = {
     "lang": "en",
     "tz": config.DEFAULT_TZ,
