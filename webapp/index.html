@@ -17,7 +17,7 @@ h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
 .line{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .hint{color:var(--hint);font-size:13px;margin-top:2px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.chip{border:0;border-radius:16px;padding:6px 12px;font:inherit;background:var(--sec);color:var(--tx)}
+.chip{border:0;border-radius:16px;padding:6px 12px;font:inherit;background:var(--sec);color:var(--tx);cursor:pointer}
 .chip.on{background:var(--btn);color:var(--btx)}
 select{font:inherit;color:var(--tx);background:var(--sec);border:0;border-radius:8px;padding:6px 8px;max-width:60%}
 .sw{position:relative;width:46px;height:28px;flex:none}
@@ -28,7 +28,7 @@ select{font:inherit;color:var(--tx);background:var(--sec);border:0;border-radius
 .sw input:checked+i:after{transform:translateX(18px)}
 .info{background:var(--bg);border-radius:14px;padding:12px 14px;font-size:14px}
 .info b{display:block;color:var(--hint);font-weight:500;font-size:13px}
-.btn{width:100%;margin-top:14px;border:0;border-radius:12px;padding:12px;font:inherit;background:var(--bg);color:var(--btn)}
+.btn{width:100%;margin-top:14px;border:0;border-radius:12px;padding:12px;font:inherit;background:var(--bg);color:var(--btn);cursor:pointer}
 #save{display:none;position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));background:var(--btn);color:var(--btx);font-weight:600}
 #toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:#000c;color:#fff;padding:8px 14px;border-radius:10px;opacity:0;transition:.25s;pointer-events:none;z-index:9}
 #toast.show{opacity:1}
@@ -45,11 +45,11 @@ const tg = window.Telegram && Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 const $ = s => document.querySelector(s);
 
-// порядок языков: en, ru, fr, es, de
 const LANGS = ['en', 'ru', 'fr', 'es', 'de'];
 const LN = { en: 'English', ru: 'Русский', fr: 'Français', es: 'Español', de: 'Deutsch' };
 const LOC = ['en-GB', 'ru-RU', 'fr-FR', 'es-ES', 'de-DE'];
 const CUR = { usd: '$', eur: '€', rub: '₽', uah: '₴', kzt: '₸' };
+
 const N = {
   lang: ['Language', 'Язык', 'Langue', 'Idioma', 'Sprache'],
   enabled: ['Receive reports', 'Получать отчёты', 'Recevoir les envois', 'Recibir envíos', 'Berichte erhalten'],
@@ -72,24 +72,31 @@ const N = {
   quiet_end: ['until', 'до', 'à', 'hasta', 'bis'],
   tz: ['Time zone', 'Часовой пояс', 'Fuseau horaire', 'Zona horaria', 'Zeitzone'],
 };
+
 const H = {
   report_interval: ['Sent exactly at the top of the hour', 'Отправляется ровно в начале часа', 'Envoyé pile à l’heure', 'Se envía en punto', 'Wird zur vollen Stunde gesendet'],
   anchor_hour: ['Slots are counted from this hour (your time zone)', 'Слоты считаются от этого часа (ваш пояс)', 'Les créneaux partent de cette heure (votre fuseau)', 'Los horarios se cuentan desde esta hora (tu zona)', 'Slots zählen ab dieser Stunde (Ihre Zeitzone)'],
   facts_enabled: ['A fact on its own arrives silently', 'Отдельный факт приходит без звука', 'Une anecdote seule arrive en silence', 'Un dato suelto llega sin sonido', 'Ein einzelner Fakt kommt lautlos'],
   quiet_enabled: ['No messages are sent at these hours', 'В это время сообщения не приходят', 'Aucun message à ces heures', 'No se envían mensajes en este horario', 'In dieser Zeit werden keine Nachrichten gesendet'],
 };
+
 const V = {
   list_mode: {
     top: ['By market cap', 'По капитализации', 'Par capitalisation', 'Por capitalización', 'Nach Marktkap.'],
     gainers: ['Top gainers', 'Лидеры роста', 'Plus fortes hausses', 'Mayores subidas', 'Größte Gewinner'],
     losers: ['Top losers', 'Лидеры падения', 'Plus fortes baisses', 'Mayores bajadas', 'Größte Verlierer'],
+    custom: ['My coins', 'Мои монеты', 'Mes cryptos', 'Mis monedas', 'Meine Coins'],
   },
 };
+
 const D = [
-  ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-  ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'], ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+  ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+  ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+  ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
+  ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
   ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
 ];
+
 const G = [
   ['🌐', ['Language', 'Язык', 'Langue', 'Idioma', 'Sprache'], ['lang']],
   ['📬', ['Delivery', 'Рассылка', 'Envoi', 'Envío', 'Versand'], ['enabled', 'report_interval', 'anchor_hour']],
@@ -99,6 +106,7 @@ const G = [
     ['coins_count', 'list_mode', 'currency', 'change_period', 'show_change', 'show_emoji', 'include_stables']],
   ['🌙', ['Schedule', 'Расписание', 'Planning', 'Horario', 'Zeitplan'], ['days', 'quiet_enabled', 'quiet_start', 'quiet_end', 'tz']],
 ];
+
 const UI = {
   save: ['Save', 'Сохранить', 'Enregistrer', 'Guardar', 'Speichern'],
   saved: ['Saved ✓', 'Сохранено ✓', 'Enregistré ✓', 'Guardado ✓', 'Gespeichert ✓'],
@@ -115,9 +123,19 @@ const UI = {
 };
 
 let S = null, spec = null, tzs = [], orig = '', next = {};
-const li = () => Math.max(0, LANGS.indexOf(S && S.lang));
-const t = (obj, k) => obj[k][li()];
 const hours = n => String(n).padStart(2, '0') + ':00';
+const li = () => {
+  const idx = LANGS.indexOf(S && S.lang);
+  return idx >= 0 ? idx : 0;
+};
+
+function labelFor(dict, key) {
+  if (dict && dict[key]) {
+    const arr = dict[key];
+    return arr[li()] || arr[0] || key;
+  }
+  return key;
+}
 
 async function api(method, path, body) {
   const r = await fetch('/api/' + path, {
@@ -138,20 +156,25 @@ function toast(text) {
 }
 
 function enumLabel(k, v) {
-  if (V[k]) return V[k][v][li()];
-  if (k === 'lang') return LN[v];
+  if (V[k] && V[k][v]) return V[k][v][li()] || V[k][v][0];
+  if (k === 'lang') return LN[v] || v;
   if (k.endsWith('_interval')) return v + UI.hh[li()];
-  if (k === 'currency') return v.toUpperCase() + ' ' + CUR[v];
+  if (k === 'currency') return v.toUpperCase() + (CUR[v] ? ' ' + CUR[v] : '');
   return String(v);
 }
 
 function control(k) {
-  const sp = spec[k], v = S[k];
-  const name = N[k][li()], hint = H[k] ? `<div class="hint">${H[k][li()]}</div>` : '';
+  const sp = spec && spec[k];
+  if (!sp) return '';
+  const v = S[k];
+  const name = labelFor(N, k);
+  const hintText = H[k] ? labelFor(H, k) : '';
+  const hint = hintText ? `<div class="hint">${hintText}</div>` : '';
+
   if (sp.type === 'bool')
     return `<div class="row"><div class="line"><span>${name}</span><label class="sw"><input type="checkbox" data-k="${k}" ${v ? 'checked' : ''}><i></i></label></div>${hint}</div>`;
   if (sp.type === 'enum')
-    return `<div class="row"><div>${name}</div>${hint}<div class="chips">${sp.values.map(x =>
+    return `<div class="row"><div>${name}</div>${hint}<div class="chips">${(sp.values||[]).map(x =>
       `<button class="chip ${x === v ? 'on' : ''}" data-k="${k}" data-v='${JSON.stringify(x)}'>${enumLabel(k, x)}</button>`).join('')}</div></div>`;
   if (sp.type === 'int') {
     const opts = Array.from({ length: sp.max - sp.min + 1 }, (_, i) => i + sp.min)
@@ -159,8 +182,8 @@ function control(k) {
     return `<div class="row"><div class="line"><span>${name}</span><select data-k="${k}" data-n="1">${opts}</select></div>${hint}</div>`;
   }
   if (sp.type === 'days')
-    return `<div class="row"><div>${name}</div><div class="chips">${D[li()].map((d, i) =>
-      `<button class="chip ${v.includes(i) ? 'on' : ''}" data-day="${i}">${d}</button>`).join('')}</div></div>`;
+    return `<div class="row"><div>${name}</div><div class="chips">${(D[li()]||D[0]).map((d, i) =>
+      `<button class="chip ${(v||[]).includes(i) ? 'on' : ''}" data-day="${i}">${d}</button>`).join('')}</div></div>`;
   if (sp.type === 'tz') {
     const list = tzs.includes(v) ? tzs : [v, ...tzs];
     return `<div class="row"><div class="line"><span>${name}</span><select data-k="tz">${list.map(z =>
@@ -182,26 +205,34 @@ function visible(k) {
 
 function fmtNext(iso) {
   if (!iso || !S.enabled) return UI.off[li()];
-  return new Date(iso).toLocaleString(LOC[li()], {
-    timeZone: S.tz, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  try {
+    return new Date(iso).toLocaleString(LOC[li()] || 'en-US', {
+      timeZone: S.tz, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch(e) { return iso; }
 }
 
 function render() {
-  const info = `<div class="info"><b>${UI.nr[li()]}</b>${fmtNext(next.r)}` +
-    (S.analytics_enabled ? `<b style="margin-top:8px">${UI.na[li()]}</b>${fmtNext(next.a)}` : '') +
-    (S.facts_enabled ? `<b style="margin-top:8px">${UI.nf[li()]}</b>${fmtNext(next.f)}` : '') + '</div>';
-  let html = info;
-  for (const [ico, title, keys] of G) {
-    const rows = keys.filter(visible).map(control).join('');
-    if (rows) html += `<h2>${ico} ${title[li()]}</h2><div class="card">${rows}</div>`;
+  try {
+    const info = `<div class="info"><b>${UI.nr[li()]}</b>${fmtNext(next.r)}` +
+      (S.analytics_enabled ? `<b style="margin-top:8px">${UI.na[li()]}</b>${fmtNext(next.a)}` : '') +
+      (S.facts_enabled ? `<b style="margin-top:8px">${UI.nf[li()]}</b>${fmtNext(next.f)}` : '') + '</div>';
+    let html = info;
+    for (const [ico, title, keys] of G) {
+      const rows = keys.filter(visible).map(control).join('');
+      if (rows) html += `<h2>${ico} ${title[li()] || title[0]}</h2><div class="card">${rows}</div>`;
+    }
+    if (S.enabled) html += `<button class="btn" id="now">${UI.now[li()]}</button>`;
+    $('#app').innerHTML = html;
+    const dirty = JSON.stringify(S) !== orig;
+    if (tg) {
+      const mb = tg.MainButton; mb.setText(UI.save[li()]);
+      dirty ? (mb.show(), tg.enableClosingConfirmation()) : (mb.hide(), tg.disableClosingConfirmation());
+    } else { $('#save').style.display = dirty ? 'block' : 'none'; $('#save').textContent = UI.save[li()]; }
+  } catch(err) {
+    $('#msg').textContent = UI.err[li()] + err.message;
+    $('#msg').hidden = false;
+    $('#app').hidden = true;
   }
-  if (S.enabled) html += `<button class="btn" id="now">${UI.now[li()]}</button>`;
-  $('#app').innerHTML = html;
-  const dirty = JSON.stringify(S) !== orig;
-  if (tg) {
-    const mb = tg.MainButton; mb.setText(UI.save[li()]);
-    dirty ? (mb.show(), tg.enableClosingConfirmation()) : (mb.hide(), tg.disableClosingConfirmation());
-  } else { $('#save').style.display = dirty ? 'block' : 'none'; $('#save').textContent = UI.save[li()]; }
 }
 
 function apply(res) {
@@ -218,7 +249,7 @@ document.addEventListener('click', async e => {
   const el = e.target.closest('button'); if (!el || !S) return;
   if (el.dataset.k) S[el.dataset.k] = JSON.parse(el.dataset.v);
   else if (el.dataset.day !== undefined) {
-    const d = +el.dataset.day, set = new Set(S.days);
+    const d = +el.dataset.day, set = new Set(S.days || []);
     set.has(d) ? (set.size > 1 && set.delete(d)) : set.add(d);
     S.days = [...set].sort();
   } else if (el.id === 'detect') {
@@ -244,9 +275,9 @@ document.addEventListener('change', e => {
   try {
     const res = await api('GET', 'settings');
     spec = res.spec; tzs = res.tz_choices; apply(res);
-    document.documentElement.lang = S.lang;
+    document.documentElement.lang = S.lang || 'en';
     $('#msg').hidden = true; $('#app').hidden = false; render();
-  } catch (e) { $('#msg').textContent = UI.err[0] + e.message; }
+  } catch (e) { $('#msg').textContent = UI.err[0] + e.message; $('#msg').hidden = false; }
 })();
 </script>
 </body>
