@@ -228,27 +228,32 @@ def _sleep_until(target: datetime) -> bool:
     return False
 
 
+def prepare(force_ai: bool) -> None:
+    try:
+        currencies, langs = db.active_currencies_langs()
+        for cur in currencies:
+            try:
+                M.get_markets(cur, max_age=0)
+            except Exception as e:
+                logger.error("Prepare: market data unavailable (%s): %s", cur, e)
+            time.sleep(2)
+        for lang in langs:
+            M.get_ai_text(lang, force=force_ai)
+    except Exception:
+        logger.exception("Prepare step failed")
+
+
 def prepare_loop() -> None:
-    """В :28 и :58 каждого часа обновляет курсы и аналитику, чтобы в слот :00 / :30
-    сообщения уходили мгновенно и с актуальными данными."""
+    """Прогрев при старте, затем в :28 и :58 каждого часа: обновляет курсы, а в :58 — ещё и
+    аналитику (раз в час, один запрос к Gemini на язык). Пользователям она отдаётся из кэша."""
+    prepare(force_ai=False)
     while not stop.is_set():
         t = datetime.now(timezone.utc).replace(second=0, microsecond=0) + timedelta(minutes=1)
         while t.minute not in (28, 58):
             t += timedelta(minutes=1)
         if not _sleep_until(t):
             return
-        try:
-            currencies, langs = db.active_currencies_langs()
-            for cur in currencies:
-                try:
-                    M.get_markets(cur, max_age=0)
-                except Exception as e:
-                    logger.error("Prepare: market data unavailable (%s): %s", cur, e)
-                time.sleep(2)
-            for lang in langs:
-                M.get_ai_text(lang, force=(t.minute == 58))
-        except Exception:
-            logger.exception("Prepare step failed")
+        prepare(force_ai=(t.minute == 58))
 
 
 def heartbeat_loop() -> None:
@@ -289,7 +294,8 @@ def send_digest() -> None:
 # Команды пользователя
 # ------------------------------------------------------------------
 def prices_text(s: dict) -> str:
-    return M.compose(s, True, False)
+    """Курс + (если включена аналитика) последняя закэшированная аналитика — без ожидания Gemini."""
+    return M.compose(s, True, s["analytics_enabled"], ai_cached_only=True)
 
 
 def handle_start(message) -> None:
@@ -502,7 +508,7 @@ def main() -> None:
     logger.info("Bot started")
     try:
         bot.infinity_polling(
-            timeout=20, long_polling_timeout=20,
+            timeout=60, long_polling_timeout=20,  # read-timeout = 60 с: запас на сетевые подвисания
             allowed_updates=["message", "callback_query"],
         )
     finally:

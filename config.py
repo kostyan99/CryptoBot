@@ -23,7 +23,12 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 ADMIN_CHAT_ID = int(os.environ["ADMIN_CHAT_ID"]) if os.getenv("ADMIN_CHAT_ID") else None
 USER_CHAT_IDS = _ids("USER_CHAT_ID")  # стартовые пользователи (добавляются в БД при запуске)
 WEBAPP_URL = (os.getenv("WEBAPP_URL") or "").rstrip("/")  # https://bot.example.com
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+# Один или несколько ключей Gemini через запятую: GEMINI_API_KEYS=key1,key2
+GEMINI_KEYS = [
+    k.strip()
+    for k in (os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY") or "").split(",")
+    if k.strip()
+]
 GEMINI_MODELS = [
     m.strip()
     for m in os.getenv(
@@ -36,7 +41,8 @@ COINGECKO_KEY = os.getenv("COINGECKO_API_KEY")
 DEFAULT_TZ = os.getenv("DEFAULT_TZ", "Europe/Kyiv")  # для новых пользователей и дайджеста админа
 CACHE_TTL = _int("CACHE_TTL", 120)  # сек: кэш курсов CoinGecko
 STALE_MAX_SEC = _int("STALE_MAX_SEC", 3600)  # старше этого кэш не отдаём
-AI_CACHE_MIN = _int("AI_CACHE_MIN", 50)  # минут: кэш аналитики Gemini
+AI_CACHE_MIN = _int("AI_CACHE_MIN", 50)  # минут: аналитика считается свежей
+AI_STALE_HOURS = _int("AI_STALE_HOURS", 6)  # до скольки часов можно отдавать прошлую аналитику при сбоях
 LATE_GRACE_MIN = _int("LATE_GRACE_MIN", 45)  # опоздавшие дольше этого слоты пропускаются
 DISPATCH_BATCH = _int("DISPATCH_BATCH", 500)
 BROADCAST_RPS = _float("BROADCAST_RPS", 25)  # лимит Telegram ~30 сообщений/сек

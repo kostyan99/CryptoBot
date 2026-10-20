@@ -73,17 +73,35 @@ def flush(timeout: float = 5.0) -> None:
     time.sleep(0.5)
 
 
+_TRANSIENT = ("Read timed out", "timed out", "ConnectionError", "Connection aborted",
+              "Connection reset", "RemoteDisconnected", "Max retries exceeded",
+              "Temporary failure in name resolution")
+_poll_errors: collections.deque = collections.deque()
+
+
+def _is_transient_polling_error(msg: str) -> bool:
+    """Разовые сетевые сбои long polling (telebot сам переподключается) — не алертим,
+    пока они не станут частыми."""
+    if "polling exception" not in msg or not any(x in msg for x in _TRANSIENT):
+        return False
+    now = time.time()
+    _poll_errors.append(now)
+    while _poll_errors and now - _poll_errors[0] > 600:
+        _poll_errors.popleft()
+    if len(_poll_errors) >= 6:
+        notify(f"⚠️ Нестабильное соединение с Telegram: {len(_poll_errors)} сбоев за 10 минут",
+               key="tg_unstable", cooldown=1800)
+    return True
+
+
 class AdminLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         if record.name.startswith("alerts") or record.levelno < logging.ERROR:
             return
         try:
             msg = _sanitize(record.getMessage())[:1200]
-            
-            # Фильтр для игнорирования штатных сетевых таймаутов от telebot
-            if "Read timed out" in msg or "Connection reset by peer" in msg:
+            if _is_transient_polling_error(msg):
                 return
-                
             exc = ""
             if record.exc_info:
                 exc = "\n" + _sanitize("".join(traceback.format_exception(*record.exc_info)[-2:]))[:1200]

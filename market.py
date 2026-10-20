@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import feedparser
 import requests
 
+import alerts
 import config
 
 logger = logging.getLogger("market")
@@ -161,6 +162,13 @@ def to_telegram_html(text: str) -> str:
     return text.replace("`", "").replace("*", "")
 
 
+def keycap(i: int) -> str:
+    """1 -> 1️⃣, 10 -> 🔟, 15 -> 1️⃣5️⃣"""
+    if i == 10:
+        return "🔟"
+    return "".join(d + "\ufe0f\u20e3" for d in str(i))
+
+
 def _change_key(period: str) -> str:
     return "price_change_percentage_7d_in_currency" if period == "7d" else \
         "price_change_percentage_24h_in_currency"
@@ -194,7 +202,7 @@ def build_coin_block(data: list, s: dict) -> str:
     for i, c in enumerate(coins, start=1):
         sym = c["symbol"].upper()
         emoji = (COIN_EMOJIS.get(sym, "⚡️") + " ") if s["show_emoji"] else ""
-        line = f"{i}. {emoji}<b>{html.escape(sym)}</b>: {fmt_price(c.get('current_price'), s['currency'])}"
+        line = f"{keycap(i)} {emoji}<b>{html.escape(sym)}</b>: {fmt_price(c.get('current_price'), s['currency'])}"
         if s["show_change"]:
             line += f" ({fmt_change(c.get(key))})"
         lines.append(line)
@@ -258,11 +266,54 @@ def _build_prompt(lang: str, trend: str, avg: float, headlines: list) -> str:
     )
 
 
-def _generate_ai(lang: str):
-    if not config.GEMINI_KEY:
-        logger.warning("GEMINI_API_KEY not set")
-        return None
+FALLBACK_FACTS = {
+    "ru": [
+        "Генезис-блок Bitcoin (3 января 2009) содержит заголовок газеты The Times о втором спасении банков.",
+        "22 мая 2010 года программист заплатил 10 000 BTC за две пиццы — первая известная покупка за биткоин.",
+        "Эмиссия биткоина ограничена 21 миллионом монет, а награда майнерам делится пополам каждые 210 000 блоков (примерно раз в четыре года).",
+        "Ethereum запущен 30 июля 2015 года, а в сентябре 2022 перешёл на Proof-of-Stake (The Merge), сократив энергопотребление сети более чем на 99%.",
+        "Белая книга Bitcoin опубликована Сатоши Накамото 31 октября 2008 года и занимает всего 9 страниц.",
+        "Минимальная единица биткоина называется сатоши — это 0,00000001 BTC.",
+        "Биржа Mt. Gox обанкротилась в 2014 году после потери около 850 000 BTC — одно из крупнейших событий в истории рынка.",
+        "Последний на данный момент халвинг Bitcoin произошёл в апреле 2024 года: награда за блок уменьшилась вдвое.",
+        "Смарт-контракт — это программа в блокчейне, которая исполняется автоматически при выполнении заданных условий, без посредника.",
+        "Блокчейн назван по структуре данных: блоки связаны цепочкой хэшей, поэтому изменить старый блок, не изменив все последующие, практически невозможно.",
+    ],
+    "en": [
+        "Bitcoin's genesis block (Jan 3, 2009) contains a headline from The Times about a second bank bailout.",
+        "On May 22, 2010 a programmer paid 10,000 BTC for two pizzas — the first known purchase made with bitcoin.",
+        "Bitcoin supply is capped at 21 million coins, and the miner reward halves every 210,000 blocks (roughly every four years).",
+        "Ethereum launched on July 30, 2015, and in September 2022 it switched to Proof-of-Stake (The Merge), cutting its energy use by more than 99%.",
+        "The Bitcoin whitepaper was published by Satoshi Nakamoto on October 31, 2008 and is only 9 pages long.",
+        "The smallest unit of bitcoin is called a satoshi: 0.00000001 BTC.",
+        "The Mt. Gox exchange went bankrupt in 2014 after losing about 850,000 BTC — one of the biggest events in market history.",
+        "The most recent Bitcoin halving happened in April 2024: the block reward was cut in half.",
+        "A smart contract is a program on a blockchain that runs automatically once preset conditions are met, with no intermediary.",
+        "A blockchain is named after its data structure: blocks are linked by a chain of hashes, so altering an old block without changing all later ones is practically impossible.",
+    ],
+}
+
+_gemini_clients: dict = {}
+_cooldown: dict = {}  # (индекс ключа, модель) -> время, до которого пропускаем (лимит 429)
+_rr = {"i": 0}
+
+
+def _client(idx: int):
     from google import genai
+    from google.genai import types
+
+    if idx not in _gemini_clients:
+        _gemini_clients[idx] = genai.Client(
+            api_key=config.GEMINI_KEYS[idx], http_options=types.HttpOptions(timeout=30000))
+    return _gemini_clients[idx]
+
+
+def _generate_ai(lang: str):
+    """Пробует все ключи и модели по очереди. Возвращает текст или None."""
+    keys = config.GEMINI_KEYS
+    if not keys:
+        logger.warning("No Gemini API keys configured")
+        return None
     from google.genai import types
 
     try:
@@ -277,42 +328,113 @@ def _generate_ai(lang: str):
              else ("падает" if ru else "falling") if avg < -0.5
              else ("во флэте" if ru else "flat"))
     prompt = _build_prompt(lang, trend, avg, get_recent_headlines())
-
-    client = genai.Client(api_key=config.GEMINI_KEY, http_options=types.HttpOptions(timeout=45000))
     gen_config = types.GenerateContentConfig(temperature=0.8)
-    for model in config.GEMINI_MODELS:
-        try:
-            resp = client.models.generate_content(model=model, contents=prompt, config=gen_config)
-            text = (resp.text or "").strip()
-            if not text:
-                raise ValueError("empty response")
-            return f"{LABELS[lang]['ai']}\n{to_telegram_html(text)}"
-        except Exception as e:
-            logger.warning("Gemini model %s failed: %s", model, e)
-    logger.error("All Gemini models failed (lang=%s)", lang)
+
+    deadline = time.time() + 90
+    start = _rr["i"] % len(keys)
+    order = [(start + k) % len(keys) for k in range(len(keys))]
+    for idx in order:
+        for model in config.GEMINI_MODELS:
+            if time.time() > deadline:
+                break
+            if _cooldown.get((idx, model), 0) > time.time():
+                continue
+            for attempt in range(2):
+                try:
+                    resp = _client(idx).models.generate_content(
+                        model=model, contents=prompt, config=gen_config)
+                    text = (resp.text or "").strip()
+                    if not text:
+                        raise ValueError("empty response")
+                    _rr["i"] = idx + 1  # следующий запрос начнём со следующего ключа
+                    return f"{LABELS[lang]['ai']}\n{to_telegram_html(text)}"
+                except Exception as e:
+                    msg = str(e).replace(keys[idx], "***")
+                    logger.warning("Gemini key#%d %s failed: %s", idx + 1, model, msg[:200])
+                    if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+                        _cooldown[(idx, model)] = time.time() + 600  # лимит: пропускаем 10 минут
+                        break
+                    transient = any(x in msg for x in ("500", "503", "504", "UNAVAILABLE",
+                                                        "overloaded", "timed out", "Timeout"))
+                    if transient and attempt == 0 and time.time() < deadline:
+                        time.sleep(3)
+                        continue
+                    break
+    logger.warning("All Gemini keys/models failed (lang=%s)", lang)
+    alerts.notify(
+        "⚠️ Gemini недоступен (все ключи/модели). Пользователям отдаётся прошлая аналитика "
+        "или запасной текст. Причины — в логах: journalctl -u cryptobot | grep Gemini",
+        key="gemini_fail", cooldown=3600)
     return None
 
 
+def fallback_ai_text(lang: str) -> str:
+    """Запасная аналитика без Gemini: реальное изменение рынка + проверенный факт."""
+    entry = _mcache.get("usd")
+    parts = []
+    if entry:
+        ch = [c.get("price_change_percentage_24h_in_currency") for c in entry["data"][:10]]
+        ch = [c for c in ch if c is not None]
+        if ch:
+            avg = sum(ch) / len(ch)
+            parts.append(f"Рынок (топ-10) за сутки в среднем {avg:+.2f}%." if lang == "ru"
+                         else f"The market (top 10) is {avg:+.2f}% on average over 24h.")
+    facts = FALLBACK_FACTS[lang]
+    fact = facts[datetime.now(timezone.utc).hour % len(facts)]
+    parts.append(("💡 Факт: " if lang == "ru" else "💡 Fact: ") + html.escape(fact))
+    return f"{LABELS[lang]['ai']}\n" + "\n".join(parts)
+
+
 _ai_cache: dict = {}
+_ai_fail_until: dict = {}
+_ai_warming: set = set()
 
 
-def get_ai_text(lang: str, force: bool = False):
-    """Аналитика с кэшем (генерируется один раз на язык, а не на каждого пользователя)."""
-    max_age = config.AI_CACHE_MIN * 60
+def _warm_async(lang: str) -> None:
+    if lang in _ai_warming:
+        return
+    _ai_warming.add(lang)
+
+    def run():
+        try:
+            get_ai_text(lang)
+        finally:
+            _ai_warming.discard(lang)
+
+    threading.Thread(target=run, daemon=True, name=f"ai-warm-{lang}").start()
+
+
+def get_ai_text(lang: str, force: bool = False, cached_only: bool = False) -> str:
+    """Аналитика всегда возвращает текст. Генерируется раз в час (один запрос на язык) и
+    кэшируется. Цепочка: свежий кэш -> Gemini (все ключи/модели) -> прошлая аналитика (до
+    AI_STALE_HOURS ч) -> запасной текст. cached_only=True никогда не ждёт Gemini."""
+    fresh_age = config.AI_CACHE_MIN * 60
+    stale_age = config.AI_STALE_HOURS * 3600
     entry = _ai_cache.get(lang)
-    if entry and not force and time.time() - entry[0] < max_age:
+    age = time.time() - entry[0] if entry else None
+
+    if cached_only:
+        if entry is None:
+            _warm_async(lang)  # кэша ещё нет (свежий запуск): греем в фоне
+        elif age < stale_age:
+            return entry[1]
+        return fallback_ai_text(lang)
+
+    if entry and not force and age < fresh_age:
         return entry[1]
     with _lock_for("ai:" + lang):
         entry = _ai_cache.get(lang)
-        if entry and not force and time.time() - entry[0] < max_age:
+        if entry and not force and time.time() - entry[0] < fresh_age:
             return entry[1]
-        text = _generate_ai(lang)
-        if text:
-            _ai_cache[lang] = (time.time(), text)
-            return text
-        if entry and time.time() - entry[0] < 3 * 3600:
+        if force or time.time() >= _ai_fail_until.get(lang, 0):
+            text = _generate_ai(lang)
+            if text:
+                _ai_cache[lang] = (time.time(), text)
+                return text
+            _ai_fail_until[lang] = time.time() + 120  # не долбим Gemini при сбое
+        if entry and time.time() - entry[0] < stale_age:
             return entry[1]
-        return None
+        return fallback_ai_text(lang)
 
 
 def cache_info() -> dict:
@@ -326,7 +448,8 @@ def cache_info() -> dict:
 # ------------------------------------------------------------------
 # Сборка сообщения по настройкам пользователя
 # ------------------------------------------------------------------
-def compose(s: dict, want_report: bool, want_analytics: bool, now: datetime = None):
+def compose(s: dict, want_report: bool, want_analytics: bool, now: datetime = None,
+            ai_cached_only: bool = False):
     """Текст сообщения для пользователя или None, если показывать нечего."""
     now = now or datetime.now(timezone.utc)
     lab = LABELS[s["lang"]]
@@ -338,7 +461,7 @@ def compose(s: dict, want_report: bool, want_analytics: bool, now: datetime = No
             parts.append(block)
             has_report = True
     if want_analytics:
-        ai = get_ai_text(s["lang"])
+        ai = get_ai_text(s["lang"], cached_only=ai_cached_only)
         if ai:
             parts.append(ai)
     if not parts:
