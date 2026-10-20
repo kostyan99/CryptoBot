@@ -14,8 +14,8 @@ pool = ConnectionPool(
     config.DATABASE_URL, min_size=1, max_size=config.DB_POOL_MAX, open=False, timeout=15
 )
 
-State = namedtuple("State", "settings next_report_at next_analytics_at")
-Job = namedtuple("Job", "chat_id settings want_report want_analytics")
+State = namedtuple("State", "settings next_report_at next_analytics_at next_facts_at")
+Job = namedtuple("Job", "chat_id settings want_report want_analytics want_facts")
 
 MIGRATIONS = [
     """
@@ -43,6 +43,12 @@ MIGRATIONS = [
         value TEXT NOT NULL
     );
     """,
+    """
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS next_facts_at TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS users_due_facts_idx
+        ON users (next_facts_at)
+        WHERE subscribed AND NOT blocked AND next_facts_at IS NOT NULL;
+    """
 ]
 
 
@@ -65,8 +71,17 @@ def init_db() -> None:
 
 
 def guess_lang(code) -> str:
-    if not code or code.lower().startswith(("ru", "uk", "be")):
+    if not code:
+        return "en"
+    code = code.lower()
+    if code.startswith(("ru", "uk", "be")):
         return "ru"
+    if code.startswith("fr"):
+        return "fr"
+    if code.startswith("es"):
+        return "es"
+    if code.startswith("de"):
+        return "de"
     return "en"
 
 
@@ -77,25 +92,23 @@ def _public(stored: dict, subscribed: bool) -> dict:
 
 
 def ensure_user(chat_id: int, user=None, subscribe=None, touch: bool = True) -> State:
-    """Создаёт пользователя при первом обращении (настройки по умолчанию).
-    subscribe=True включает рассылку (команда /start)."""
     now = _now()
     lang = guess_lang(getattr(user, "language_code", None))
     username = getattr(user, "username", None)
     first_name = getattr(user, "first_name", None)
     init = S.merged({"lang": lang})
-    nr0, na0 = S.compute_next(init, now)
+    nr0, na0, nf0 = S.compute_next(init, now)
 
     with pool.connection() as conn:
         conn.execute(
             """
-            INSERT INTO users (chat_id, settings, next_report_at, next_analytics_at)
-            VALUES (%s, %s, %s, %s) ON CONFLICT (chat_id) DO NOTHING
+            INSERT INTO users (chat_id, settings, next_report_at, next_analytics_at, next_facts_at)
+            VALUES (%s, %s, %s, %s, %s) ON CONFLICT (chat_id) DO NOTHING
             """,
-            (chat_id, Jsonb({"lang": lang}), nr0, na0),
+            (chat_id, Jsonb({"lang": lang}), nr0, na0, nf0),
         )
-        stored, subscribed, nr, na = conn.execute(
-            "SELECT settings, subscribed, next_report_at, next_analytics_at "
+        stored, subscribed, nr, na, nf = conn.execute(
+            "SELECT settings, subscribed, next_report_at, next_analytics_at, next_facts_at "
             "FROM users WHERE chat_id = %s FOR UPDATE",
             (chat_id,),
         ).fetchone()
@@ -103,7 +116,7 @@ def ensure_user(chat_id: int, user=None, subscribe=None, touch: bool = True) -> 
         resubscribe = bool(subscribe) and not subscribed
         if resubscribe:
             subscribed = True
-            nr, na = S.compute_next(s, now)
+            nr, na, nf = S.compute_next(s, now)
         conn.execute(
             """
             UPDATE users SET
@@ -113,30 +126,29 @@ def ensure_user(chat_id: int, user=None, subscribe=None, touch: bool = True) -> 
                 subscribed = %s,
                 next_report_at = %s,
                 next_analytics_at = %s,
+                next_facts_at = %s,
                 last_seen_at = now(),
                 requests = requests + %s
             WHERE chat_id = %s
             """,
-            (username, first_name, subscribed, nr, na, 1 if touch else 0, chat_id),
+            (username, first_name, subscribed, nr, na, nf, 1 if touch else 0, chat_id),
         )
-    return State(_public(stored, subscribed), nr, na)
+    return State(_public(stored, subscribed), nr, na, nf)
 
 
 def get_state(chat_id: int):
     with pool.connection() as conn:
         row = conn.execute(
-            "SELECT settings, subscribed, next_report_at, next_analytics_at "
+            "SELECT settings, subscribed, next_report_at, next_analytics_at, next_facts_at "
             "FROM users WHERE chat_id = %s",
             (chat_id,),
         ).fetchone()
     if row is None:
         return None
-    return State(_public(row[0], row[1]), row[2], row[3])
+    return State(_public(row[0], row[1]), row[2], row[3], row[4])
 
 
 def save_settings(chat_id: int, partial: dict) -> State:
-    """Валидирует и сохраняет настройки, пересчитывает расписание.
-    ValueError — некорректные данные, KeyError — пользователя нет."""
     clean = S.validate_partial(partial)
     enabled_new = clean.pop("enabled", None)
     with pool.connection() as conn:
@@ -149,14 +161,14 @@ def save_settings(chat_id: int, partial: dict) -> State:
         s.update(clean)
         S.validate_consistency(s)
         subscribed = row[1] if enabled_new is None else enabled_new
-        nr, na = S.compute_next(s, _now())
+        nr, na, nf = S.compute_next(s, _now())
         conn.execute(
             "UPDATE users SET settings = %s, subscribed = %s, next_report_at = %s, "
-            "next_analytics_at = %s, force_send = FALSE WHERE chat_id = %s",
-            (Jsonb(s), subscribed, nr, na, chat_id),
+            "next_analytics_at = %s, next_facts_at = %s, force_send = FALSE WHERE chat_id = %s",
+            (Jsonb(s), subscribed, nr, na, nf, chat_id),
         )
     s["enabled"] = subscribed
-    return State(s, nr, na)
+    return State(s, nr, na, nf)
 
 
 def set_subscribed(chat_id: int, value: bool) -> None:
@@ -167,7 +179,6 @@ def set_subscribed(chat_id: int, value: bool) -> None:
 
 
 def request_send_now(chat_id: int) -> bool:
-    """Просит планировщик отправить отчёт сейчас (в обход тихих часов/дней)."""
     with pool.connection() as conn:
         cur = conn.execute(
             "UPDATE users SET next_report_at = now(), force_send = TRUE "
@@ -190,13 +201,13 @@ def delete_user(chat_id: int) -> None:
 def seed_users(chat_ids: list) -> None:
     now = _now()
     init = S.merged({})
-    nr, na = S.compute_next(init, now)
+    nr, na, nf = S.compute_next(init, now)
     with pool.connection() as conn:
         for chat_id in chat_ids:
             conn.execute(
-                "INSERT INTO users (chat_id, settings, next_report_at, next_analytics_at) "
-                "VALUES (%s, '{}'::jsonb, %s, %s) ON CONFLICT (chat_id) DO NOTHING",
-                (chat_id, nr, na),
+                "INSERT INTO users (chat_id, settings, next_report_at, next_analytics_at, next_facts_at) "
+                "VALUES (%s, '{}'::jsonb, %s, %s, %s) ON CONFLICT (chat_id) DO NOTHING",
+                (chat_id, nr, na, nf),
             )
 
 
@@ -231,19 +242,26 @@ def get_stats() -> dict:
 
 
 def active_currencies_langs() -> tuple:
-    """(валюты активных пользователей, языки пользователей с аналитикой) — для прогрева кэша."""
+    """Возвращает (валюты, языки для аналитики, языки для фактов) активных пользователей."""
     with pool.connection() as conn:
         cur = conn.execute(
             "SELECT DISTINCT COALESCE(settings->>'currency', 'usd') "
             "FROM users WHERE subscribed AND NOT blocked"
         ).fetchall()
-        lng = conn.execute(
-            "SELECT DISTINCT COALESCE(settings->>'lang', 'ru') FROM users "
+        
+        ana_lng = conn.execute(
+            "SELECT DISTINCT COALESCE(settings->>'lang', 'en') FROM users "
             "WHERE subscribed AND NOT blocked "
             "AND COALESCE((settings->>'analytics_enabled')::boolean, TRUE)"
         ).fetchall()
-    return [r[0] for r in cur], [r[0] for r in lng]
-
+        
+        fact_lng = conn.execute(
+            "SELECT DISTINCT COALESCE(settings->>'lang', 'en') FROM users "
+            "WHERE subscribed AND NOT blocked "
+            "AND COALESCE((settings->>'facts_enabled')::boolean, TRUE)"
+        ).fetchall()
+        
+    return [r[0] for r in cur], [r[0] for r in ana_lng], [r[0] for r in fact_lng]
 
 def active_ids(after_id: int, limit: int = 1000) -> list:
     with pool.connection() as conn:
@@ -256,32 +274,33 @@ def active_ids(after_id: int, limit: int = 1000) -> list:
 
 
 def claim_due(limit: int) -> tuple:
-    """Атомарно забирает пачку пользователей, у которых наступил слот отчёта и/или аналитики,
-    сдвигает им расписание и возвращает задания на отправку.
-    Возвращает (jobs, claimed_count, max_lag_seconds)."""
     now = _now()
     grace = config.LATE_GRACE_MIN * 60
     jobs, updates, max_lag, claimed = [], [], 0.0, 0
     with pool.connection() as conn:
         rows = conn.execute(
             """
-            SELECT chat_id, settings, next_report_at, next_analytics_at, force_send
+            SELECT chat_id, settings, next_report_at, next_analytics_at, next_facts_at, force_send
             FROM users
             WHERE subscribed AND NOT blocked
-              AND (next_report_at <= %(now)s OR next_analytics_at <= %(now)s)
-            ORDER BY LEAST(next_report_at, next_analytics_at)
+              AND (next_report_at <= %(now)s OR next_analytics_at <= %(now)s OR next_facts_at <= %(now)s)
+            ORDER BY LEAST(next_report_at, next_analytics_at, next_facts_at)
             LIMIT %(limit)s
             FOR UPDATE SKIP LOCKED
             """,
             {"now": now, "limit": limit},
         ).fetchall()
-        for chat_id, stored, nr, na, force in rows:
+        for chat_id, stored, nr, na, nf, force in rows:
             claimed += 1
             s = S.merged(stored)
             report_due = nr is not None and nr <= now
             ana_due = s["analytics_enabled"] and na is not None and na <= now
-            want_r, want_a = report_due, ana_due
-            new_nr, new_na = nr, (na if s["analytics_enabled"] else None)
+            facts_due = s["facts_enabled"] and nf is not None and nf <= now
+
+            want_r, want_a, want_f = report_due, ana_due, facts_due
+            new_nr = nr
+            new_na = na if s["analytics_enabled"] else None
+            new_nf = nf if s["facts_enabled"] else None
 
             if report_due:
                 lag = (now - nr).total_seconds()
@@ -293,21 +312,26 @@ def claim_due(limit: int) -> tuple:
                 max_lag = max(max_lag, lag)
                 new_na = S.next_slot(now, s["tz"], s["analytics_interval"], s["anchor_hour"])
                 want_a = lag <= grace
+            if facts_due:
+                lag = (now - nf).total_seconds()
+                max_lag = max(max_lag, lag)
+                new_nf = S.next_slot(now, s["tz"], s["facts_interval"], s["anchor_hour"])
+                want_f = lag <= grace
 
             if force:
-                want_r, want_a = True, s["analytics_enabled"]
-            elif (want_r or want_a) and not S.is_allowed_now(s, now):
-                want_r = want_a = False
+                want_r, want_a, want_f = True, s["analytics_enabled"], s["facts_enabled"]
+            elif (want_r or want_a or want_f) and not S.is_allowed_now(s, now):
+                want_r = want_a = want_f = False
 
-            if want_r or want_a:
-                jobs.append(Job(chat_id, s, want_r, want_a))
-            updates.append((new_nr, new_na, chat_id))
+            if want_r or want_a or want_f:
+                jobs.append(Job(chat_id, s, want_r, want_a, want_f))
+            updates.append((new_nr, new_na, new_nf, chat_id))
 
         if updates:
             with conn.cursor() as cur:
                 cur.executemany(
                     "UPDATE users SET next_report_at = %s, next_analytics_at = %s, "
-                    "force_send = FALSE WHERE chat_id = %s",
+                    "next_facts_at = %s, force_send = FALSE WHERE chat_id = %s",
                     updates,
                 )
     return jobs, claimed, max_lag

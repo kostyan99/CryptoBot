@@ -40,50 +40,106 @@ def count(name: str, n: int = 1) -> None:
 # Тексты
 # ------------------------------------------------------------------
 T = {
-    "ru": {
-        "start": "👋 <b>Привет!</b> Я присылаю курс топ-монет и AI-аналитику.\n\n{summary}\n\n"
-                 "Всё настраивается кнопкой «⚙️ Настройки».",
-        "sum_ai": "📬 Отчёт: каждые {r} ч · 🧠 Аналитика: каждые {a} ч",
-        "sum_noai": "📬 Отчёт: каждые {r} ч · 🧠 Аналитика выключена",
-        "sum_off": "🔕 Рассылка выключена",
-        "stop": "🔕 Рассылка отключена. Вернуть: /start или «⚙️ Настройки».",
-        "settings": "Откройте настройки бота:",
-        "no_webapp": "⚠️ Настройки временно недоступны.",
-        "btn_settings": "⚙️ Настройки",
-        "btn_top": "📊 Курс сейчас",
-        "err": "⚠️ Не удалось получить данные. Попробуйте через минуту.",
-        "help": "📖 <b>Команды</b>\n/top — курс сейчас\n/settings — настройки\n/stop — отключить рассылку\n"
-                "/start — включить рассылку\n/delete — удалить мои данные",
-        "delete_hint": "Чтобы удалить все ваши данные, отправьте: /delete confirm",
-        "deleted": "🗑 Ваши данные удалены. Чтобы вернуться, отправьте /start.",
-    },
     "en": {
-        "start": "👋 <b>Hi!</b> I send top-coin prices and AI analytics.\n\n{summary}\n\n"
+        "start": "👋 <b>Hi!</b> I send top-coin prices, AI analytics and fun crypto facts.\n\n{summary}\n\n"
                  "Everything is configurable via the “⚙️ Settings” button.",
-        "sum_ai": "📬 Report: every {r} h · 🧠 Analytics: every {a} h",
-        "sum_noai": "📬 Report: every {r} h · 🧠 Analytics: off",
-        "sum_off": "🔕 Reports are off",
+        "rep": "📬 Prices", "ana": "🧠 Analytics", "fact": "💡 Facts",
+        "every": "every {n} h", "off": "off", "reports_off": "🔕 Reports are off",
         "stop": "🔕 Reports are off. Turn on: /start or “⚙️ Settings”.",
         "settings": "Open the bot settings:",
         "no_webapp": "⚠️ Settings are temporarily unavailable.",
-        "btn_settings": "⚙️ Settings",
-        "btn_top": "📊 Prices now",
+        "btn_settings": "⚙️ Settings", "btn_top": "📊 Prices now",
         "err": "⚠️ Could not fetch data. Please try again in a minute.",
         "help": "📖 <b>Commands</b>\n/top — prices now\n/settings — settings\n/stop — stop reports\n"
                 "/start — enable reports\n/delete — delete my data",
         "delete_hint": "To delete all your data, send: /delete confirm",
         "deleted": "🗑 Your data has been deleted. Send /start to come back.",
     },
+    "ru": {
+        "start": "👋 <b>Привет!</b> Я присылаю курс топ-монет, AI-аналитику и интересные факты о крипте.\n\n"
+                 "{summary}\n\nВсё настраивается кнопкой «⚙️ Настройки».",
+        "rep": "📬 Курс", "ana": "🧠 Аналитика", "fact": "💡 Факты",
+        "every": "каждые {n} ч", "off": "выключено", "reports_off": "🔕 Рассылка выключена",
+        "stop": "🔕 Рассылка отключена. Вернуть: /start или «⚙️ Настройки».",
+        "settings": "Откройте настройки бота:",
+        "no_webapp": "⚠️ Настройки временно недоступны.",
+        "btn_settings": "⚙️ Настройки", "btn_top": "📊 Курс сейчас",
+        "err": "⚠️ Не удалось получить данные. Попробуйте через минуту.",
+        "help": "📖 <b>Команды</b>\n/top — курс сейчас\n/settings — настройки\n/stop — отключить рассылку\n"
+                "/start — включить рассылку\n/delete — удалить мои данные",
+        "delete_hint": "Чтобы удалить все ваши данные, отправьте: /delete confirm",
+        "deleted": "🗑 Ваши данные удалены. Чтобы вернуться, отправьте /start.",
+    },
+    "fr": {
+        "start": "👋 <b>Salut !</b> J’envoie les cours des principales cryptos, des analyses IA et des "
+                 "anecdotes crypto.\n\n{summary}\n\nTout se règle via le bouton « ⚙️ Paramètres ».",
+        "rep": "📬 Cours", "ana": "🧠 Analyse", "fact": "💡 Anecdotes",
+        "every": "toutes les {n} h", "off": "désactivé", "reports_off": "🔕 Envois désactivés",
+        "stop": "🔕 Envois désactivés. Pour réactiver : /start ou « ⚙️ Paramètres ».",
+        "settings": "Ouvrez les paramètres du bot :",
+        "no_webapp": "⚠️ Paramètres temporairement indisponibles.",
+        "btn_settings": "⚙️ Paramètres", "btn_top": "📊 Cours maintenant",
+        "err": "⚠️ Impossible de récupérer les données. Réessayez dans une minute.",
+        "help": "📖 <b>Commandes</b>\n/top — cours maintenant\n/settings — paramètres\n"
+                "/stop — arrêter les envois\n/start — activer les envois\n/delete — supprimer mes données",
+        "delete_hint": "Pour supprimer toutes vos données, envoyez : /delete confirm",
+        "deleted": "🗑 Vos données ont été supprimées. Envoyez /start pour revenir.",
+    },
+    "es": {
+        "start": "👋 <b>¡Hola!</b> Envío precios de las principales criptomonedas, análisis con IA y "
+                 "datos curiosos.\n\n{summary}\n\nTodo se configura con el botón «⚙️ Ajustes».",
+        "rep": "📬 Precios", "ana": "🧠 Análisis", "fact": "💡 Datos curiosos",
+        "every": "cada {n} h", "off": "desactivado", "reports_off": "🔕 Envíos desactivados",
+        "stop": "🔕 Envíos desactivados. Para volver: /start o «⚙️ Ajustes».",
+        "settings": "Abre los ajustes del bot:",
+        "no_webapp": "⚠️ Los ajustes no están disponibles temporalmente.",
+        "btn_settings": "⚙️ Ajustes", "btn_top": "📊 Precios ahora",
+        "err": "⚠️ No se pudieron obtener los datos. Inténtalo de nuevo en un minuto.",
+        "help": "📖 <b>Comandos</b>\n/top — precios ahora\n/settings — ajustes\n/stop — detener envíos\n"
+                "/start — activar envíos\n/delete — borrar mis datos",
+        "delete_hint": "Para borrar todos tus datos, envía: /delete confirm",
+        "deleted": "🗑 Tus datos han sido eliminados. Envía /start para volver.",
+    },
+    "de": {
+        "start": "👋 <b>Hallo!</b> Ich sende Kurse der Top-Coins, KI-Analysen und spannende Krypto-Fakten."
+                 "\n\n{summary}\n\nAlles lässt sich über die Schaltfläche „⚙️ Einstellungen“ anpassen.",
+        "rep": "📬 Kurse", "ana": "🧠 Analyse", "fact": "💡 Fakten",
+        "every": "alle {n} Std.", "off": "aus", "reports_off": "🔕 Versand ist aus",
+        "stop": "🔕 Versand ist aus. Wieder einschalten: /start oder „⚙️ Einstellungen“.",
+        "settings": "Bot-Einstellungen öffnen:",
+        "no_webapp": "⚠️ Einstellungen sind vorübergehend nicht verfügbar.",
+        "btn_settings": "⚙️ Einstellungen", "btn_top": "📊 Kurse jetzt",
+        "err": "⚠️ Daten konnten nicht abgerufen werden. Bitte in einer Minute erneut versuchen.",
+        "help": "📖 <b>Befehle</b>\n/top — Kurse jetzt\n/settings — Einstellungen\n/stop — Versand stoppen\n"
+                "/start — Versand aktivieren\n/delete — meine Daten löschen",
+        "delete_hint": "Um alle Ihre Daten zu löschen, senden Sie: /delete confirm",
+        "deleted": "🗑 Ihre Daten wurden gelöscht. Senden Sie /start, um zurückzukehren.",
+    },
+}
+
+# описания команд в меню Telegram: top, settings, stop, start, help
+COMMANDS = {
+    "en": ["Prices now", "Settings", "Stop reports", "Start reports", "Help"],
+    "ru": ["Курс сейчас", "Настройки", "Отключить рассылку", "Включить рассылку", "Помощь"],
+    "fr": ["Cours maintenant", "Paramètres", "Arrêter les envois", "Activer les envois", "Aide"],
+    "es": ["Precios ahora", "Ajustes", "Detener envíos", "Activar envíos", "Ayuda"],
+    "de": ["Kurse jetzt", "Einstellungen", "Versand stoppen", "Versand aktivieren", "Hilfe"],
 }
 
 
 def summary(s: dict) -> str:
     t = T[s["lang"]]
     if not s["enabled"]:
-        return t["sum_off"]
-    if s["analytics_enabled"]:
-        return t["sum_ai"].format(r=s["report_interval"], a=s["analytics_interval"])
-    return t["sum_noai"].format(r=s["report_interval"])
+        return t["reports_off"]
+
+    def line(label, on, n):
+        return f"{label}: " + (t["every"].format(n=n) if on else t["off"])
+
+    return "\n".join([
+        line(t["rep"], True, s["report_interval"]),
+        line(t["ana"], s["analytics_enabled"], s["analytics_interval"]),
+        line(t["fact"], s["facts_enabled"], s["facts_interval"]),
+    ])
 
 
 # ------------------------------------------------------------------
@@ -125,14 +181,15 @@ class RateLimiter:
 limiter = RateLimiter(config.BROADCAST_RPS)
 
 
-def send(chat_id, text: str, throttle: bool = False, markup=None) -> str:
+def send(chat_id, text: str, throttle: bool = False, markup=None, silent: bool = False) -> str:
     """Возвращает 'ok' | 'blocked' | 'error'."""
     parse_mode = "HTML"
     for _ in range(4):
         if throttle:
             limiter.wait()
         try:
-            bot.send_message(chat_id, text, parse_mode=parse_mode, reply_markup=markup)
+            bot.send_message(chat_id, text, parse_mode=parse_mode, reply_markup=markup,
+                             disable_notification=silent)
             return "ok"
         except ApiTelegramException as e:
             code, desc = e.error_code, (e.description or "").lower()
@@ -155,8 +212,8 @@ def send(chat_id, text: str, throttle: bool = False, markup=None) -> str:
 
 
 def deliver(item: tuple) -> str:
-    chat_id, text, lang = item
-    result = send(chat_id, text, throttle=True, markup=settings_markup(lang))
+    chat_id, text, lang, silent = item
+    result = send(chat_id, text, throttle=True, markup=settings_markup(lang), silent=silent)
     if result == "blocked":
         try:
             db.mark_blocked(chat_id)
@@ -204,12 +261,14 @@ def dispatcher_loop() -> None:
             if job.want_report and not want_r:
                 count("skipped_no_data")
             try:
-                text = M.compose(s, want_r, job.want_analytics)
+                text = M.compose(s, want_r, job.want_analytics, job.want_facts)
             except Exception:
                 logger.exception("compose failed for %s", job.chat_id)
                 continue
             if text:
-                items.append((job.chat_id, text, s["lang"]))
+                # сообщение только с фактом приходит без звука
+                silent = not (want_r or job.want_analytics)
+                items.append((job.chat_id, text, s["lang"], silent))
 
         if items:
             list(ex.map(deliver, items))
@@ -230,15 +289,17 @@ def _sleep_until(target: datetime) -> bool:
 
 def prepare(force_ai: bool) -> None:
     try:
-        currencies, langs = db.active_currencies_langs()
+        currencies, ana_langs, fact_langs = db.active_currencies_langs()
         for cur in currencies:
             try:
                 M.get_markets(cur, max_age=0)
             except Exception as e:
                 logger.error("Prepare: market data unavailable (%s): %s", cur, e)
             time.sleep(2)
-        for lang in langs:
-            M.get_ai_text(lang, force=force_ai)
+        for lang in ana_langs:
+            M.get_ai_text("analysis", lang, force=force_ai)
+        for lang in fact_langs:
+            M.get_ai_text("fact", lang, force=force_ai)
     except Exception:
         logger.exception("Prepare step failed")
 
@@ -277,7 +338,8 @@ def stats_text() -> str:
         c = dict(counters)
     return (
         f"👥 Всего: {st['total']}\n✅ Активных: {st['active']}\n"
-        f"🚫 Заблокировали бота: {st['blocked']}\n🧠 С аналитикой: {st['analytics']}\n\n"
+        f"🚫 Заблокировали бота: {st['blocked']}\n🧠 С аналитикой: {st['analytics']}\n"
+        f"💡 С фактами: {st['facts']}\n🌐 Языки: {st['langs'] or '—'}\n\n"
         f"📤 С момента запуска: отправлено {c.get('sent_ok', 0)}, "
         f"заблокировано {c.get('sent_blocked', 0)}, ошибок {c.get('sent_error', 0)}, "
         f"пропусков (нет данных) {c.get('skipped_no_data', 0)}"
@@ -294,8 +356,8 @@ def send_digest() -> None:
 # Команды пользователя
 # ------------------------------------------------------------------
 def prices_text(s: dict) -> str:
-    """Курс + (если включена аналитика) последняя закэшированная аналитика — без ожидания Gemini."""
-    return M.compose(s, True, s["analytics_enabled"], ai_cached_only=True)
+    """Курс + (если включены) закэшированные аналитика и факт — без ожидания Gemini."""
+    return M.compose(s, True, s["analytics_enabled"], s["facts_enabled"], ai_cached_only=True)
 
 
 def handle_start(message) -> None:
@@ -434,7 +496,7 @@ def run_broadcast(text: str, admin_id: int) -> None:
             if not ids:
                 break
             last_id = ids[-1]
-            for res in ex.map(lambda cid: deliver((cid, body, "ru")), ids):
+            for res in ex.map(lambda cid: deliver((cid, body, "en", False)), ids):
                 ok += res == "ok"
                 blocked += res == "blocked"
                 err += res == "error"
@@ -464,18 +526,12 @@ def on_broadcast_choice(call):
 # ------------------------------------------------------------------
 def setup_telegram_ui() -> None:
     try:
-        for lang, code in (("ru", None), ("en", "en")):
-            cmds = [
-                types.BotCommand("top", "Курс сейчас" if lang == "ru" else "Prices now"),
-                types.BotCommand("settings", "Настройки" if lang == "ru" else "Settings"),
-                types.BotCommand("stop", "Отключить рассылку" if lang == "ru" else "Stop reports"),
-                types.BotCommand("start", "Включить рассылку" if lang == "ru" else "Start reports"),
-                types.BotCommand("help", "Помощь" if lang == "ru" else "Help"),
-            ]
-            bot.set_my_commands(cmds, language_code=code)
+        for lang, names in COMMANDS.items():
+            cmds = [types.BotCommand(c, d) for c, d in zip(("top", "settings", "stop", "start", "help"), names)]
+            bot.set_my_commands(cmds, language_code=None if lang == "en" else lang)
         if config.WEBAPP_URL:
             bot.set_chat_menu_button(menu_button=types.MenuButtonWebApp(
-                type="web_app", text="⚙️ Настройки", web_app=types.WebAppInfo(config.WEBAPP_URL)))
+                type="web_app", text="⚙️ Settings", web_app=types.WebAppInfo(config.WEBAPP_URL)))
         else:
             logger.warning("WEBAPP_URL not set: settings button is disabled")
     except Exception:

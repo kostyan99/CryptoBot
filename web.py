@@ -102,7 +102,16 @@ def payload(state) -> dict:
         "settings": state.settings,
         "next_report_at": _iso(state.next_report_at),
         "next_analytics_at": _iso(state.next_analytics_at),
+        "next_facts_at": _iso(state.next_facts_at),
     }
+
+def top_coins() -> list:
+    """Список топ-100 монет для выбора (его пишет бот в таблицу meta)."""
+    try:
+        raw = db.get_meta("top_coins")
+        return json.loads(raw) if raw else []
+    except Exception:
+        return []
 
 
 @app.get("/")
@@ -114,16 +123,20 @@ def index():
 def get_settings(request: Request):
     user = current_user(request)
     rate_limit(user["id"], "get", 60, 60)
-    info = SimpleNamespace(username=user.get("username"), first_name=user.get("first_name"),
-                           language_code=user.get("language_code"))
+    info = SimpleNamespace(username=user.get("username"), first_name=user.get("first_name"))
     state = db.ensure_user(user["id"], info, touch=False)
-    return {**payload(state), "spec": S.SPEC, "tz_choices": S.TZ_CHOICES}
+    return {**payload(state), "spec": S.SPEC, "tz_choices": S.TZ_CHOICES, "coins": top_coins()}
 
 
 @app.put("/api/settings")
 def put_settings(request: Request, data: dict = Body(...)):
     user = current_user(request)
     rate_limit(user["id"], "put", 30, 60)
+    picked = data.get("custom_coins")
+    if isinstance(picked, list):
+        known = {c["id"] for c in top_coins()}
+        if known and any(x not in known for x in picked):
+            raise HTTPException(status_code=400, detail="custom_coins: coin is not in the top 100")
     try:
         state = db.save_settings(user["id"], data)
     except ValueError as e:

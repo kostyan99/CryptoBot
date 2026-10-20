@@ -1,24 +1,32 @@
 """Спецификация настроек пользователя, валидация и расчёт расписания.
 Единый источник правды для бота и веб-приложения."""
+import re
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import config
 
 INTERVALS = [1, 2, 3, 4, 6, 8, 12, 24]
-CURRENCIES = ["usd", "eur", "uah", "pln", "gbp"]
+LANGS = ["en", "ru", "fr", "es", "de"]
+CURRENCIES = ["usd", "eur", "rub", "uah", "kzt"]
 
 SPEC = {
     "enabled": {"type": "bool"},
-    "lang": {"type": "enum", "values": ["ru", "en"]},
+    "lang": {"type": "enum", "values": LANGS},
     "tz": {"type": "tz"},
     "report_interval": {"type": "enum", "values": INTERVALS},
     "analytics_enabled": {"type": "bool"},
-    "analytics_interval": {"type": "enum", "values": INTERVALS},
+    "analytics_interval": {"type": "enum", "values": [6, 12]},
+    "facts_enabled": {"type": "bool"},
+    "facts_interval": {"type": "enum", "values": INTERVALS},
     "anchor_hour": {"type": "int", "min": 0, "max": 23},
     "coins_count": {"type": "enum", "values": [3, 5, 10, 15, 20]},
     "currency": {"type": "enum", "values": CURRENCIES},
-    "list_mode": {"type": "enum", "values": ["top", "gainers", "losers"]},
+    "list_mode": {"type": "enum", "values": ["top", "gainers", "losers", "custom"]},
+    "custom_coins": {"type": "coins", "max": 10},
+    "show_indices": {"type": "bool"},
+    "move_alerts": {"type": "bool"},
+    "move_threshold": {"type": "enum", "values": [3, 5, 7, 10, 15]},
     "change_period": {"type": "enum", "values": ["24h", "7d"]},
     "show_change": {"type": "bool"},
     "show_emoji": {"type": "bool"},
@@ -29,17 +37,22 @@ SPEC = {
     "days": {"type": "days"},
 }
 
-# "enabled" хранится отдельной колонкой subscribed, остальное — в JSONB
 DEFAULTS = {
-    "lang": "ru",
+    "lang": "en",
     "tz": config.DEFAULT_TZ,
     "report_interval": 2,
     "analytics_enabled": True,
-    "analytics_interval": 4,
+    "analytics_interval": 6,
+    "facts_enabled": True,
+    "facts_interval": 1,
     "anchor_hour": 0,
     "coins_count": 10,
     "currency": "usd",
     "list_mode": "top",
+    "custom_coins": [],
+    "show_indices": True,
+    "move_alerts": True,
+    "move_threshold": 5,
     "change_period": "24h",
     "show_change": True,
     "show_emoji": True,
@@ -85,6 +98,15 @@ def check_value(key: str, value):
         except Exception:
             raise ValueError("tz: unknown timezone")
         return value
+    if t == "coins":
+        if (
+            not isinstance(value, list)
+            or len(value) > spec["max"]
+            or len(set(map(str, value))) != len(value)
+            or any(not isinstance(x, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", x) for x in value)
+        ):
+            raise ValueError("custom_coins: invalid list")
+        return list(value)
     if t == "days":
         if (
             not isinstance(value, list)
@@ -112,10 +134,13 @@ def merged(stored: dict) -> dict:
             except ValueError:
                 pass
     result["days"] = list(result["days"])
+    result["custom_coins"] = list(result["custom_coins"])
     return result
 
 
 def validate_consistency(s: dict) -> None:
+    if s["list_mode"] == "custom" and not s["custom_coins"]:
+        raise ValueError("choose at least one coin for 'My coins' mode")
     if s["quiet_enabled"] and s["quiet_start"] == s["quiet_end"]:
         raise ValueError("quiet hours: start and end must differ")
 
@@ -140,7 +165,12 @@ def compute_next(s: dict, after: datetime) -> tuple:
         if s["analytics_enabled"]
         else None
     )
-    return nr, na
+    nf = (
+        next_slot(after, s["tz"], s["facts_interval"], s["anchor_hour"])
+        if s["facts_enabled"]
+        else None
+    )
+    return nr, na, nf
 
 
 def is_allowed_now(s: dict, now_utc: datetime) -> bool:
