@@ -45,55 +45,77 @@ const tg = window.Telegram && Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 const $ = s => document.querySelector(s);
 
-// [ru, en] подписи
+// порядок языков: en, ru, fr, es, de
+const LANGS = ['en', 'ru', 'fr', 'es', 'de'];
+const LN = { en: 'English', ru: 'Русский', fr: 'Français', es: 'Español', de: 'Deutsch' };
+const LOC = ['en-GB', 'ru-RU', 'fr-FR', 'es-ES', 'de-DE'];
+const CUR = { usd: '$', eur: '€', rub: '₽', uah: '₴', kzt: '₸' };
 const N = {
-  enabled: ['Получать отчёты', 'Receive reports'],
-  report_interval: ['Как часто присылать отчёт', 'Report frequency'],
-  anchor_hour: ['Отсчёт от часа', 'Count from hour'],
-  analytics_enabled: ['Присылать аналитику', 'Send analytics'],
-  analytics_interval: ['Как часто присылать аналитику', 'Analytics frequency'],
-  coins_count: ['Сколько монет в списке', 'Coins in the list'],
-  list_mode: ['Что показывать', 'What to show'],
-  currency: ['Валюта', 'Currency'],
-  change_period: ['Период изменения цены', 'Price change period'],
-  show_change: ['Показывать изменение цены', 'Show price change'],
-  show_emoji: ['Эмодзи у монет', 'Coin emoji'],
-  include_stables: ['Показывать стейблкоины', 'Show stablecoins'],
-  days: ['Дни недели', 'Days of the week'],
-  quiet_enabled: ['Тихие часы', 'Quiet hours'],
-  quiet_start: ['Не беспокоить с', 'Do not disturb from'],
-  quiet_end: ['до', 'until'],
-  tz: ['Часовой пояс', 'Time zone'],
-  lang: ['Язык отчётов и интерфейса', 'Language'],
+  lang: ['Language', 'Язык', 'Langue', 'Idioma', 'Sprache'],
+  enabled: ['Receive reports', 'Получать отчёты', 'Recevoir les envois', 'Recibir envíos', 'Berichte erhalten'],
+  report_interval: ['Prices frequency', 'Как часто присылать курс', 'Fréquence des cours', 'Frecuencia de precios', 'Häufigkeit der Kurse'],
+  anchor_hour: ['Count from hour', 'Отсчёт от часа', 'Compter à partir de', 'Contar desde la hora', 'Zählen ab Stunde'],
+  analytics_enabled: ['AI analytics', 'AI-аналитика', 'Analyse IA', 'Análisis con IA', 'KI-Analyse'],
+  analytics_interval: ['Analytics frequency', 'Как часто присылать аналитику', 'Fréquence de l’analyse', 'Frecuencia del análisis', 'Häufigkeit der Analyse'],
+  facts_enabled: ['Fun crypto facts', 'Интересные факты о крипте', 'Anecdotes crypto', 'Datos curiosos cripto', 'Krypto-Fakten'],
+  facts_interval: ['Facts frequency', 'Как часто присылать факты', 'Fréquence des anecdotes', 'Frecuencia de datos', 'Häufigkeit der Fakten'],
+  coins_count: ['Coins in the list', 'Сколько монет в списке', 'Nombre de cryptos', 'Monedas en la lista', 'Anzahl Coins'],
+  list_mode: ['What to show', 'Что показывать', 'Affichage', 'Qué mostrar', 'Anzeige'],
+  currency: ['Currency', 'Валюта', 'Devise', 'Moneda', 'Währung'],
+  change_period: ['Price change period', 'Период изменения цены', 'Période de variation', 'Periodo de variación', 'Zeitraum der Änderung'],
+  show_change: ['Show price change', 'Показывать изменение цены', 'Afficher la variation', 'Mostrar variación', 'Änderung anzeigen'],
+  show_emoji: ['Coin emoji', 'Эмодзи у монет', 'Emoji des cryptos', 'Emojis de monedas', 'Coin-Emojis'],
+  include_stables: ['Show stablecoins', 'Показывать стейблкоины', 'Afficher les stablecoins', 'Mostrar stablecoins', 'Stablecoins anzeigen'],
+  days: ['Days of the week', 'Дни недели', 'Jours de la semaine', 'Días de la semana', 'Wochentage'],
+  quiet_enabled: ['Quiet hours', 'Тихие часы', 'Heures calmes', 'Horas de silencio', 'Ruhezeiten'],
+  quiet_start: ['Do not disturb from', 'Не беспокоить с', 'Ne pas déranger de', 'No molestar desde', 'Nicht stören von'],
+  quiet_end: ['until', 'до', 'à', 'hasta', 'bis'],
+  tz: ['Time zone', 'Часовой пояс', 'Fuseau horaire', 'Zona horaria', 'Zeitzone'],
 };
 const H = {
-  report_interval: ['Отчёт приходит ровно в начале часа', 'Reports arrive at the top of the hour'],
-  anchor_hour: ['Расписание строится от этого часа (по вашему часовому поясу)', 'Schedule is counted from this hour (your time zone)'],
-  analytics_interval: ['AI-обзор новостей и рынка', 'AI digest of news and market'],
-  quiet_enabled: ['В это время сообщения не отправляются', 'No messages are sent during this time'],
+  report_interval: ['Sent exactly at the top of the hour', 'Отправляется ровно в начале часа', 'Envoyé pile à l’heure', 'Se envía en punto', 'Wird zur vollen Stunde gesendet'],
+  anchor_hour: ['Slots are counted from this hour (your time zone)', 'Слоты считаются от этого часа (ваш пояс)', 'Les créneaux partent de cette heure (votre fuseau)', 'Los horarios se cuentan desde esta hora (tu zona)', 'Slots zählen ab dieser Stunde (Ihre Zeitzone)'],
+  facts_enabled: ['A fact on its own arrives silently', 'Отдельный факт приходит без звука', 'Une anecdote seule arrive en silence', 'Un dato suelto llega sin sonido', 'Ein einzelner Fakt kommt lautlos'],
+  quiet_enabled: ['No messages are sent at these hours', 'В это время сообщения не приходят', 'Aucun message à ces heures', 'No se envían mensajes en este horario', 'In dieser Zeit werden keine Nachrichten gesendet'],
 };
 const V = {
-  list_mode: { top: ['По капитализации', 'By market cap'], gainers: ['Лидеры роста', 'Top gainers'], losers: ['Лидеры падения', 'Top losers'] },
-  lang: { ru: ['Русский', 'Русский'], en: ['English', 'English'] },
+  list_mode: {
+    top: ['By market cap', 'По капитализации', 'Par capitalisation', 'Por capitalización', 'Nach Marktkap.'],
+    gainers: ['Top gainers', 'Лидеры роста', 'Plus fortes hausses', 'Mayores subidas', 'Größte Gewinner'],
+    losers: ['Top losers', 'Лидеры падения', 'Plus fortes baisses', 'Mayores bajadas', 'Größte Verlierer'],
+  },
 };
-const D = [['Пн','Вт','Ср','Чт','Пт','Сб','Вс'], ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']];
+const D = [
+  ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+  ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'], ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+  ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+];
 const G = [
-  ['📬', ['Рассылка', 'Delivery'], ['enabled', 'report_interval', 'anchor_hour']],
-  ['🧠', ['Аналитика', 'Analytics'], ['analytics_enabled', 'analytics_interval']],
-  ['📊', ['Содержимое', 'Content'], ['coins_count', 'list_mode', 'currency', 'change_period', 'show_change', 'show_emoji', 'include_stables']],
-  ['🌙', ['Расписание', 'Schedule'], ['days', 'quiet_enabled', 'quiet_start', 'quiet_end', 'tz']],
-  ['🌐', ['Язык', 'Language'], ['lang']],
+  ['🌐', ['Language', 'Язык', 'Langue', 'Idioma', 'Sprache'], ['lang']],
+  ['📬', ['Delivery', 'Рассылка', 'Envoi', 'Envío', 'Versand'], ['enabled', 'report_interval', 'anchor_hour']],
+  ['🧠', ['Analytics & facts', 'Аналитика и факты', 'Analyse et anecdotes', 'Análisis y datos', 'Analyse & Fakten'],
+    ['analytics_enabled', 'analytics_interval', 'facts_enabled', 'facts_interval']],
+  ['📊', ['Content', 'Содержимое', 'Contenu', 'Contenido', 'Inhalt'],
+    ['coins_count', 'list_mode', 'currency', 'change_period', 'show_change', 'show_emoji', 'include_stables']],
+  ['🌙', ['Schedule', 'Расписание', 'Planning', 'Horario', 'Zeitplan'], ['days', 'quiet_enabled', 'quiet_start', 'quiet_end', 'tz']],
 ];
 const UI = {
-  save: ['Сохранить', 'Save'], saved: ['Сохранено ✓', 'Saved ✓'], now: ['📨 Отправить отчёт сейчас', '📨 Send a report now'],
-  sent: ['Отчёт отправляется…', 'Sending a report…'], err: ['Ошибка: ', 'Error: '],
-  open: ['Откройте настройки из Telegram', 'Open the settings from Telegram'],
-  nr: ['Следующий отчёт', 'Next report'], na: ['Следующая аналитика', 'Next analytics'],
-  off: ['выключено', 'off'], detect: ['Определить пояс', 'Detect'], hh: [' ч', ' h'],
+  save: ['Save', 'Сохранить', 'Enregistrer', 'Guardar', 'Speichern'],
+  saved: ['Saved ✓', 'Сохранено ✓', 'Enregistré ✓', 'Guardado ✓', 'Gespeichert ✓'],
+  now: ['📨 Send now', '📨 Отправить сейчас', '📨 Envoyer maintenant', '📨 Enviar ahora', '📨 Jetzt senden'],
+  sent: ['Sending…', 'Отправляется…', 'Envoi…', 'Enviando…', 'Wird gesendet…'],
+  err: ['Error: ', 'Ошибка: ', 'Erreur : ', 'Error: ', 'Fehler: '],
+  open: ['Open the settings from Telegram', 'Откройте настройки из Telegram'],
+  nr: ['Next prices', 'Следующий курс', 'Prochains cours', 'Próximos precios', 'Nächste Kurse'],
+  na: ['Next analytics', 'Следующая аналитика', 'Prochaine analyse', 'Próximo análisis', 'Nächste Analyse'],
+  nf: ['Next fact', 'Следующий факт', 'Prochaine anecdote', 'Próximo dato', 'Nächster Fakt'],
+  off: ['off', 'выключено', 'désactivé', 'desactivado', 'aus'],
+  detect: ['Detect', 'Определить', 'Détecter', 'Detectar', 'Erkennen'],
+  hh: [' h', ' ч', ' h', ' h', ' Std.'],
 };
 
 let S = null, spec = null, tzs = [], orig = '', next = {};
-const li = () => (S && S.lang === 'en') ? 1 : 0;
+const li = () => Math.max(0, LANGS.indexOf(S && S.lang));
 const t = (obj, k) => obj[k][li()];
 const hours = n => String(n).padStart(2, '0') + ':00';
 
@@ -117,8 +139,9 @@ function toast(text) {
 
 function enumLabel(k, v) {
   if (V[k]) return V[k][v][li()];
+  if (k === 'lang') return LN[v];
   if (k.endsWith('_interval')) return v + UI.hh[li()];
-  if (k === 'currency') return v.toUpperCase();
+  if (k === 'currency') return v.toUpperCase() + ' ' + CUR[v];
   return String(v);
 }
 
@@ -151,6 +174,7 @@ function visible(k) {
   if (k === 'enabled' || k === 'lang') return true;
   if (!S.enabled) return false;
   if (k === 'analytics_interval') return S.analytics_enabled;
+  if (k === 'facts_interval') return S.facts_enabled;
   if (k === 'quiet_start' || k === 'quiet_end') return S.quiet_enabled;
   if (k === 'change_period') return S.list_mode !== 'top' || S.show_change;
   return true;
@@ -158,13 +182,14 @@ function visible(k) {
 
 function fmtNext(iso) {
   if (!iso || !S.enabled) return UI.off[li()];
-  return new Date(iso).toLocaleString(li() ? 'en-GB' : 'ru-RU', {
+  return new Date(iso).toLocaleString(LOC[li()], {
     timeZone: S.tz, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 function render() {
   const info = `<div class="info"><b>${UI.nr[li()]}</b>${fmtNext(next.r)}` +
-    (S.analytics_enabled ? `<b style="margin-top:8px">${UI.na[li()]}</b>${fmtNext(next.a)}` : '') + '</div>';
+    (S.analytics_enabled ? `<b style="margin-top:8px">${UI.na[li()]}</b>${fmtNext(next.a)}` : '') +
+    (S.facts_enabled ? `<b style="margin-top:8px">${UI.nf[li()]}</b>${fmtNext(next.f)}` : '') + '</div>';
   let html = info;
   for (const [ico, title, keys] of G) {
     const rows = keys.filter(visible).map(control).join('');
@@ -181,7 +206,7 @@ function render() {
 
 function apply(res) {
   S = res.settings; orig = JSON.stringify(S);
-  next = { r: res.next_report_at, a: res.next_analytics_at };
+  next = { r: res.next_report_at, a: res.next_analytics_at, f: res.next_facts_at };
 }
 
 async function save() {
