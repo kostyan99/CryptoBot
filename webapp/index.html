@@ -54,7 +54,6 @@ const tg = window.Telegram && Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 const $ = s => document.querySelector(s);
 
-// порядок языков: en, ru, fr, es, de
 const LANGS = ['en', 'ru', 'fr', 'es', 'de'];
 const LN = { en: 'English', ru: 'Русский', fr: 'Français', es: 'Español', de: 'Deutsch' };
 const LOC = ['en-GB', 'ru-RU', 'fr-FR', 'es-ES', 'de-DE'];
@@ -110,10 +109,8 @@ const D = [
 const G = [
   ['🌐', ['Language', 'Язык', 'Langue', 'Idioma', 'Sprache'], ['lang']],
   ['📬', ['Delivery', 'Рассылка', 'Envoi', 'Envío', 'Versand'], ['enabled', 'report_interval', 'anchor_hour']],
-  ['🧠', ['Analytics & facts', 'Аналитика и факты', 'Analyse et anecdotes', 'Análisis y datos', 'Analyse & Fakten'],
-    ['analytics_enabled', 'analytics_interval', 'facts_enabled', 'facts_interval']],
-  ['📊', ['Content', 'Содержимое', 'Contenu', 'Contenido', 'Inhalt'],
-    ['list_mode', 'custom_coins', 'coins_count', 'currency', 'change_period', 'show_change', 'show_emoji', 'include_stables', 'show_indices']],
+  ['🧠', ['Analytics & facts', 'Аналитика и факты', 'Analyse et anecdotes', 'Análisis y datos', 'Analyse & Fakten'], ['analytics_enabled', 'analytics_interval', 'facts_enabled', 'facts_interval']],
+  ['📊', ['Content', 'Содержимое', 'Contenu', 'Contenido', 'Inhalt'], ['list_mode', 'custom_coins', 'coins_count', 'currency', 'change_period', 'show_change', 'show_emoji', 'include_stables', 'show_indices']],
   ['🚨', ['Alerts', 'Алерты', 'Alertes', 'Alertas', 'Alarme'], ['move_alerts', 'move_threshold']],
   ['🎮', ['Game', 'Игра', 'Jeu', 'Juego', 'Spiel'], ['game_hide_name']],
   ['🌙', ['Schedule', 'Расписание', 'Planning', 'Horario', 'Zeitplan'], ['days', 'quiet_enabled', 'quiet_start', 'quiet_end', 'tz']],
@@ -144,7 +141,6 @@ const UI = {
 let S = null, spec = null, tzs = [], coins = [], q = '', orig = '', next = {};
 const esc = x => String(x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const li = () => Math.max(0, LANGS.indexOf(S && S.lang));
-const t = (obj, k) => obj[k][li()];
 const hours = n => String(n).padStart(2, '0') + ':00';
 
 async function api(method, path, body) {
