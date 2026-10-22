@@ -49,130 +49,130 @@ FACT_TOPICS = [
 
 LABELS = {
     "en": {"hdr_market": "📊 <b>Market overview, {time}</b>", "hdr_digest": "🧠 <b>Crypto digest, {time}</b>",
-           "top": "🏆 <b>Top {n} coins</b>", "gainers": "🚀 <b>Top gainers</b>",
-           "losers": "🔻 <b>Top losers</b>", "ai": "🧠 <b>Analytics:</b>", "fact": "💡 <b>Fun fact:</b>"},
+            "top": "🏆 <b>Top {n} coins</b>", "gainers": "🚀 <b>Top gainers</b>",
+            "losers": "🔻 <b>Top losers</b>", "ai": "🧠 <b>Analytics:</b>", "fact": "💡 <b>Fun fact:</b>"},
     "ru": {"hdr_market": "📊 <b>Обзор рынка на {time}</b>", "hdr_digest": "🧠 <b>Крипто-дайджест на {time}</b>",
-           "top": "🏆 <b>Топ-{n} монет</b>", "gainers": "🚀 <b>Лидеры роста</b>",
-           "losers": "🔻 <b>Лидеры падения</b>", "ai": "🧠 <b>Аналитика:</b>", "fact": "💡 <b>Интересный факт:</b>"},
+            "top": "🏆 <b>Топ-{n} монет</b>", "gainers": "🚀 <b>Лидеры роста</b>",
+            "losers": "🔻 <b>Лидеры падения</b>", "ai": "🧠 <b>Аналитика:</b>", "fact": "💡 <b>Интересный факт:</b>"},
     "fr": {"hdr_market": "📊 <b>Aperçu du marché, {time}</b>", "hdr_digest": "🧠 <b>Digest crypto, {time}</b>",
-           "top": "🏆 <b>Top {n} cryptos</b>", "gainers": "🚀 <b>Plus fortes hausses</b>",
-           "losers": "🔻 <b>Plus fortes baisses</b>", "ai": "🧠 <b>Analyse :</b>", "fact": "💡 <b>Le saviez-vous ?</b>"},
+            "top": "🏆 <b>Top {n} cryptos</b>", "gainers": "🚀 <b>Plus fortes hausses</b>",
+            "losers": "🔻 <b>Plus fortes baisses</b>", "ai": "🧠 <b>Analyse :</b>", "fact": "💡 <b>Le saviez-vous ?</b>"},
     "es": {"hdr_market": "📊 <b>Resumen del mercado, {time}</b>", "hdr_digest": "🧠 <b>Resumen cripto, {time}</b>",
-           "top": "🏆 <b>Top {n} monedas</b>", "gainers": "🚀 <b>Mayores subidas</b>",
-           "losers": "🔻 <b>Mayores bajadas</b>", "ai": "🧠 <b>Análisis:</b>", "fact": "💡 <b>Dato curioso:</b>"},
+            "top": "🏆 <b>Top {n} monedas</b>", "gainers": "🚀 <b>Mayores subidas</b>",
+            "losers": "🔻 <b>Mayores bajadas</b>", "ai": "🧠 <b>Análisis:</b>", "fact": "💡 <b>Dato curioso:</b>"},
     "de": {"hdr_market": "📊 <b>Marktübersicht, {time}</b>", "hdr_digest": "🧠 <b>Krypto-Digest, {time}</b>",
-           "top": "🏆 <b>Top {n} Coins</b>", "gainers": "🚀 <b>Größte Gewinner</b>",
-           "losers": "🔻 <b>Größte Verlierer</b>", "ai": "🧠 <b>Analyse:</b>", "fact": "💡 <b>Wussten Sie schon?</b>"},
+            "top": "🏆 <b>Top {n} Coins</b>", "gainers": "🚀 <b>Größte Gewinner</b>",
+            "losers": "🔻 <b>Größte Verlierer</b>", "ai": "🧠 <b>Analyse:</b>", "fact": "💡 <b>Wussten Sie schon?</b>"},
 }
 
 EXTRA = {
     "en": {"custom": "⭐ <b>Your coins</b>", "alert_hdr": "🚨 <b>Whoa, big move!</b>", "alert_per": "1h",
-           "fng": "Fear & Greed", "dom": "BTC dominance"},
+            "fng": "Fear & Greed", "dom": "BTC dominance"},
     "ru": {"custom": "⭐ <b>Ваши монеты</b>", "alert_hdr": "🚨 <b>Ого, резкое движение!</b>", "alert_per": "за час",
-           "fng": "Страх и жадность", "dom": "Доминирование BTC"},
+            "fng": "Страх и жадность", "dom": "Доминирование BTC"},
     "fr": {"custom": "⭐ <b>Vos cryptos</b>", "alert_hdr": "🚨 <b>Wow, gros mouvement !</b>", "alert_per": "en 1 h",
-           "fng": "Peur & Avidité", "dom": "Dominance BTC"},
+            "fng": "Peur & Avidité", "dom": "Dominance BTC"},
     "es": {"custom": "⭐ <b>Tus monedas</b>", "alert_hdr": "🚨 <b>¡Uf, gran movimiento!</b>", "alert_per": "en 1 h",
-           "fng": "Miedo y Codicia", "dom": "Dominancia BTC"},
+            "fng": "Miedo y Codicia", "dom": "Dominancia BTC"},
     "de": {"custom": "⭐ <b>Ihre Coins</b>", "alert_hdr": "🚨 <b>Wow, starke Bewegung!</b>", "alert_per": "in 1 Std.",
-           "fng": "Angst & Gier", "dom": "BTC-Dominanz"},
+            "fng": "Angst & Gier", "dom": "BTC-Dominanz"},
 }
 WEEKLY_LABELS = {
     "en": {"weekly_title": "🗓 <b>Your week in crypto</b>", "weekly_best": "🏅 Best of the week: <b>{sym}</b> {chg}",
-           "weekly_worst": "🥶 Toughest week: <b>{sym}</b> {chg}"},
+            "weekly_worst": "🥶 Toughest week: <b>{sym}</b> {chg}"},
     "ru": {"weekly_title": "🗓 <b>Ваша неделя в крипте</b>", "weekly_best": "🏅 Лучшая за неделю: <b>{sym}</b> {chg}",
-           "weekly_worst": "🥶 Самая тяжёлая: <b>{sym}</b> {chg}"},
+            "weekly_worst": "🥶 Самая тяжёлая: <b>{sym}</b> {chg}"},
     "fr": {"weekly_title": "🗓 <b>Votre semaine en crypto</b>", "weekly_best": "🏅 Meilleure de la semaine : <b>{sym}</b> {chg}",
-           "weekly_worst": "🥶 Semaine la plus dure : <b>{sym}</b> {chg}"},
+            "weekly_worst": "🥶 Semaine la plus dure : <b>{sym}</b> {chg}"},
     "es": {"weekly_title": "🗓 <b>Tu semana en cripto</b>", "weekly_best": "🏅 Mejor de la semana: <b>{sym}</b> {chg}",
-           "weekly_worst": "🥶 La más floja: <b>{sym}</b> {chg}"},
+            "weekly_worst": "🥶 La más floja: <b>{sym}</b> {chg}"},
     "de": {"weekly_title": "🗓 <b>Ihre Krypto-Woche</b>", "weekly_best": "🏅 Beste der Woche: <b>{sym}</b> {chg}",
-           "weekly_worst": "🥶 Schwächste Woche: <b>{sym}</b> {chg}"},
+            "weekly_worst": "🥶 Schwächste Woche: <b>{sym}</b> {chg}"},
 }
 for _l in LABELS:
     LABELS[_l].update(EXTRA[_l])
     LABELS[_l].update(WEEKLY_LABELS[_l])
 
-# настроение рынка по среднему изменению топ-10 за 24ч: bull / up / calm / down / bear
+# настроение рынка по среднему изменению топ-10 за 24ч: bull / up / up / calm / down / bear
 MOOD = {
     "en": ["Green party on the market! 🟢🎉", "A pleasant green day 🌱", "Calm waters today 🌊",
-           "A little red today 🍂", "Rough day out there — hold tight 🫡🔴"],
+            "A little red today 🍂", "Rough day out there — hold tight 🫡🔴"],
     "ru": ["На рынке зелёная вечеринка! 🟢🎉", "Приятный зелёный день 🌱", "Сегодня штиль 🌊",
-           "Немного красного на рынке 🍂", "Тяжёлый день на рынке — держимся 🫡🔴"],
+            "Немного красного на рынке 🍂", "Тяжёлый день на рынке — держимся 🫡🔴"],
     "fr": ["Fête verte sur le marché ! 🟢🎉", "Une belle journée verte 🌱", "Mer calme aujourd’hui 🌊",
-           "Un peu de rouge aujourd’hui 🍂", "Journée difficile — on tient bon 🫡🔴"],
+            "Un peu de rouge aujourd’hui 🍂", "Journée difficile — on tient bon 🫡🔴"],
     "es": ["¡Fiesta verde en el mercado! 🟢🎉", "Un agradable día en verde 🌱", "Aguas tranquilas hoy 🌊",
-           "Un poco de rojo hoy 🍂", "Día duro — a aguantar 🫡🔴"],
+            "Un poco de rojo hoy 🍂", "Día duro — a aguantar 🫡🔴"],
     "de": ["Grüne Party am Markt! 🟢🎉", "Ein angenehmer grüner Tag 🌱", "Heute ruhige Gewässer 🌊",
-           "Heute etwas Rot 🍂", "Harter Tag — durchhalten 🫡🔴"],
+            "Heute etwas Rot 🍂", "Harter Tag — durchhalten 🫡🔴"],
 }
 
 # настроение недели (по среднему 7-дневному изменению монет пользователя)
 WEEK_MOOD = {
     "en": ["What a week — green all over! 🟢🎉", "A solid green week 🌱", "A quiet, steady week 🌊",
-           "A bit of a rough week 🍂", "A tough week — you made it through 🫡"],
+            "A bit of a rough week 🍂", "A tough week — you made it through 🫡"],
     "ru": ["Какая неделя — всё в зелёном! 🟢🎉", "Хорошая зелёная неделя 🌱", "Спокойная ровная неделя 🌊",
-           "Немного хмурая неделя 🍂", "Тяжёлая неделя — но мы выстояли 🫡"],
+            "Немного хмурая неделя 🍂", "Тяжёлая неделя — но мы выстояли 🫡"],
     "fr": ["Quelle semaine — tout en vert ! 🟢🎉", "Une belle semaine verte 🌱", "Une semaine calme et stable 🌊",
-           "Une semaine un peu difficile 🍂", "Semaine dure — on a tenu bon 🫡"],
+            "Une semaine un peu difficile 🍂", "Semaine dure — on a tenu bon 🫡"],
     "es": ["¡Qué semana — todo en verde! 🟢🎉", "Una buena semana en verde 🌱", "Una semana tranquila y estable 🌊",
-           "Una semana algo complicada 🍂", "Semana dura — la superamos 🫡"],
+            "Una semana algo complicada 🍂", "Semana dura — la superamos 🫡"],
     "de": ["Was für eine Woche — alles im grünen Bereich! 🟢🎉", "Eine solide grüne Woche 🌱",
-           "Eine ruhige, stabile Woche 🌊", "Eine etwas holprige Woche 🍂", "Harte Woche — aber geschafft 🫡"],
+            "Eine ruhige, stabile Woche 🌊", "Eine etwas holprige Woche 🍂", "Harte Woche — aber geschafft 🫡"],
 }
 
 # классы индекса Fear & Greed (как их отдаёт alternative.me)
 FNG_CLASS = {
     "ru": {"Extreme Fear": "Экстремальный страх", "Fear": "Страх", "Neutral": "Нейтрально",
-           "Greed": "Жадность", "Extreme Greed": "Экстремальная жадность"},
+            "Greed": "Жадность", "Extreme Greed": "Экстремальная жадность"},
     "fr": {"Extreme Fear": "Peur extrême", "Fear": "Peur", "Neutral": "Neutre",
-           "Greed": "Avidité", "Extreme Greed": "Avidité extrême"},
+            "Greed": "Avidité", "Extreme Greed": "Avidité extrême"},
     "es": {"Extreme Fear": "Miedo extremo", "Fear": "Miedo", "Neutral": "Neutral",
-           "Greed": "Codicia", "Extreme Greed": "Codicia extrema"},
+            "Greed": "Codicia", "Extreme Greed": "Codicia extrema"},
     "de": {"Extreme Fear": "Extreme Angst", "Fear": "Angst", "Neutral": "Neutral",
-           "Greed": "Gier", "Extreme Greed": "Extreme Gier"},
+            "Greed": "Gier", "Extreme Greed": "Extreme Gier"},
     "en": {},
 }
 
 # Расчётная аналитика без Gemini: средний рост топ-10, лидеры, индекс страха и жадности, доминирование BTC
 FALLBACK_AI = {
     "en": {"up": "The top 10 is up {avg} on average over 24h.", "down": "The top 10 is down {avg} on average over 24h.",
-           "flat": "The top 10 is roughly flat over 24h ({avg}).", "leaders": "Leaders: {items}.",
-           "drop": "Biggest drop: {items}.", "and": " and ",
-           "fng": "The Fear & Greed index is at {v} — {mood}.", "dom": "BTC dominance: {v}.",
-           "moods": {"Extreme Fear": "extreme fear dominates", "Fear": "fear prevails",
-                     "Neutral": "the mood is neutral", "Greed": "optimism prevails",
-                     "Extreme Greed": "euphoria, stay careful"}},
+            "flat": "The top 10 is roughly flat over 24h ({avg}).", "leaders": "Leaders: {items}.",
+            "drop": "Biggest drop: {items}.", "and": " and ",
+            "fng": "The Fear & Greed index is at {v} — {mood}.", "dom": "BTC dominance: {v}.",
+            "moods": {"Extreme Fear": "extreme fear dominates", "Fear": "fear prevails",
+                      "Neutral": "the mood is neutral", "Greed": "optimism prevails",
+                      "Extreme Greed": "euphoria, stay careful"}},
     "ru": {"up": "Топ-10 криптовалют показывает средний рост {avg} за сутки.",
-           "down": "Топ-10 криптовалют показывает среднее падение {avg} за сутки.",
-           "flat": "Топ-10 криптовалют почти без изменений за сутки ({avg}).",
-           "leaders": "Лидерами являются {items}.", "drop": "Сильнее всех снизилась: {items}.", "and": " и ",
-           "fng": "Индекс страха и жадности находится на уровне {v}, {mood}.", "dom": "Доминирование BTC: {v}.",
-           "moods": {"Extreme Fear": "что говорит о сильном страхе", "Fear": "что говорит о преобладании страха",
-                     "Neutral": "что говорит о нейтральных настроениях",
-                     "Greed": "что говорит о преобладании оптимизма",
-                     "Extreme Greed": "что говорит об эйфории, будьте осторожны"}},
+            "down": "Топ-10 криптовалют показывает среднее падение {avg} за сутки.",
+            "flat": "Топ-10 криптовалют почти без изменений за сутки ({avg}).",
+            "leaders": "Лидерами являются {items}.", "drop": "Сильнее всех снизилась: {items}.", "and": " и ",
+            "fng": "Индекс страха и жадности находится на уровне {v}, {mood}.", "dom": "Доминирование BTC: {v}.",
+            "moods": {"Extreme Fear": "что говорит о сильном страхе", "Fear": "что говорит о преобладании страха",
+                      "Neutral": "что говорит о нейтральных настроениях",
+                      "Greed": "что говорит о преобладании оптимизма",
+                      "Extreme Greed": "что говорит об эйфории, будьте осторожны"}},
     "fr": {"up": "Le top 10 progresse de {avg} en moyenne sur 24 h.", "down": "Le top 10 recule de {avg} en moyenne sur 24 h.",
-           "flat": "Le top 10 est quasi stable sur 24 h ({avg}).", "leaders": "En tête : {items}.",
-           "drop": "Plus forte baisse : {items}.", "and": " et ",
-           "fng": "L’indice Peur & Avidité est à {v} — {mood}.", "dom": "Dominance BTC : {v}.",
-           "moods": {"Extreme Fear": "la peur extrême domine", "Fear": "la peur domine",
-                     "Neutral": "le sentiment est neutre", "Greed": "l’optimisme domine",
-                     "Extreme Greed": "euphorie, restez prudent"}},
+            "flat": "Le top 10 est quasi stable sur 24 h ({avg}).", "leaders": "En tête : {items}.",
+            "drop": "Plus forte baisse : {items}.", "and": " et ",
+            "fng": "L’indice Peur & Avidité est à {v} — {mood}.", "dom": "Dominance BTC : {v}.",
+            "moods": {"Extreme Fear": "la peur extrême domine", "Fear": "la peur domine",
+                      "Neutral": "le sentiment est neutre", "Greed": "l’optimisme domine",
+                      "Extreme Greed": "euphorie, restez prudent"}},
     "es": {"up": "El top 10 sube de media {avg} en 24 h.", "down": "El top 10 baja de media {avg} en 24 h.",
-           "flat": "El top 10 está casi sin cambios en 24 h ({avg}).", "leaders": "Lideran: {items}.",
-           "drop": "Mayor caída: {items}.", "and": " y ",
-           "fng": "El índice de Miedo y Codicia está en {v} — {mood}.", "dom": "Dominancia de BTC: {v}.",
-           "moods": {"Extreme Fear": "domina el miedo extremo", "Fear": "predomina el miedo",
-                     "Neutral": "el ánimo es neutral", "Greed": "predomina el optimismo",
-                     "Extreme Greed": "euforia, ojo con el exceso"}},
+            "flat": "El top 10 está casi sin cambios en 24 h ({avg}).", "leaders": "Lideran: {items}.",
+            "drop": "Mayor caída: {items}.", "and": " y ",
+            "fng": "El índice de Miedo y Codicia está en {v} — {mood}.", "dom": "Dominancia de BTC: {v}.",
+            "moods": {"Extreme Fear": "domina el miedo extremo", "Fear": "predomina el miedo",
+                      "Neutral": "el ánimo es neutral", "Greed": "predomina el optimismo",
+                      "Extreme Greed": "euforia, ojo con el exceso"}},
     "de": {"up": "Die Top 10 liegen im Schnitt {avg} im Plus (24 Std.).", "down": "Die Top 10 liegen im Schnitt {avg} im Minus (24 Std.).",
-           "flat": "Die Top 10 sind in 24 Std. nahezu unverändert ({avg}).", "leaders": "Spitzenreiter: {items}.",
-           "drop": "Größter Verlust: {items}.", "and": " und ",
-           "fng": "Der Angst-&-Gier-Index steht bei {v} — {mood}.", "dom": "BTC-Dominanz: {v}.",
-           "moods": {"Extreme Fear": "extreme Angst dominiert", "Fear": "Angst überwiegt",
-                     "Neutral": "die Stimmung ist neutral", "Greed": "Optimismus überwiegt",
-                     "Extreme Greed": "Euphorie, Vorsicht geboten"}},
+            "flat": "Die Top 10 sind in 24 Std. nahezu unverändert ({avg}).", "leaders": "Spitzenreiter: {items}.",
+            "drop": "Größter Verlust: {items}.", "and": " und ",
+            "fng": "Der Angst-&-Gier-Index steht bei {v} — {mood}.", "dom": "BTC-Dominanz: {v}.",
+            "moods": {"Extreme Fear": "extreme Angst dominiert", "Fear": "Angst überwiegt",
+                      "Neutral": "die Stimmung ist neutral", "Greed": "Optimismus überwiegt",
+                      "Extreme Greed": "Euphorie, Vorsicht geboten"}},
 }
 
 FALLBACK_FACTS = {
@@ -189,12 +189,12 @@ FALLBACK_FACTS = {
     "ru": [
         "Генезис-блок Bitcoin (3 января 2009) содержит заголовок газеты The Times о втором спасении банков.",
         "22 мая 2010 года программист заплатил 10 000 BTC за две пиццы — первая известная покупка за биткоин.",
-        "Эмиссия биткоина ограничена 21 миллионом монет, а награда майнерам делится пополам каждые 210 000 блоков (примерно раз в четыре года).",
+        "Эмиссия биткоина ограничена 21 миллионом монет, а награда майнерам делится пополам каждые 210 000 блоков [...]",
         "Ethereum запущен 30 июля 2015 года, а в сентябре 2022 перешёл на Proof-of-Stake (The Merge), сократив энергопотребление сети более чем на 99%.",
         "Белая книга Bitcoin опубликована Сатоши Накамото 31 октября 2008 года и занимает всего 9 страниц.",
         "Минимальная единица биткоина называется сатоши — это 0,00000001 BTC.",
         "Биржа Mt. Gox обанкротилась в 2014 году после потери около 850 000 BTC — одно из крупнейших событий в истории рынка.",
-        "Смарт-контракт — это программа в блокчейне, которая исполняется автоматически при выполнении заданных условий, без посредника.",
+        "Смарт-контракт — это программа в блокчейне, которая исполняется автоматически при выполнении заданных условий, без посредников.",
     ],
     "fr": [
         "Le bloc de genèse de Bitcoin (3 janvier 2009) contient un titre du Times sur un second renflouement des banques.",
@@ -265,7 +265,7 @@ def _lock_for(name: str) -> threading.Lock:
 
 
 def get_markets(currency: str = "usd", max_age: float = None) -> list:
-    """Топ-100 по капитализации в нужной валюте. Кэш на CACHE_TTL сек: тысячи запросов
+    """Топ-200 по капитализации в нужной валюте. Кэш на CACHE_TTL сек: тысячи запросов
     пользователей = один запрос к CoinGecko. Пока кто-то обновляет кэш, остальные
     получают предыдущие данные; при сбое отдаётся кэш не старше STALE_MAX_SEC."""
     max_age = config.CACHE_TTL if max_age is None else max_age
@@ -282,7 +282,7 @@ def get_markets(currency: str = "usd", max_age: float = None) -> list:
             return entry["data"]
         url = (
             "https://api.coingecko.com/api/v3/coins/markets"
-            f"?vs_currency={currency}&order=market_cap_desc&per_page=100&page=1"
+            f"?vs_currency={currency}&order=market_cap_desc&per_page=200&page=1"
             "&sparkline=false&price_change_percentage=1h,24h,7d"
         )
         try:
@@ -359,7 +359,7 @@ def _pool(data: list, include_stables: bool = False) -> list:
 
 def pick_coins(data: list, s: dict) -> list:
     n, mode = s["coins_count"], s["list_mode"]
-    if mode == "custom":  # свои монеты (из топ-100) в порядке, выбранном пользователем
+    if mode == "custom":  # свои монеты (из топ-200) в порядке, выбранном пользователем
         by_id = {c["id"]: c for c in data}
         return [by_id[i] for i in s["custom_coins"] if i in by_id]
     pool = _pool(data, s["include_stables"])
@@ -453,7 +453,7 @@ def _parse_multi(raw: str) -> dict:
     """JSON с текстами на всех языках -> {lang: text}. Бросает ValueError, если чего-то не хватает."""
     data = _json_text(raw)
     out = {l: data[l].strip() for l in LANG_NAMES
-           if isinstance(data.get(l), str) and data[l].strip()}
+            if isinstance(data.get(l), str) and data[l].strip()}
     if len(out) != len(LANG_NAMES):
         raise ValueError("JSON has missing languages")
     return out
@@ -523,7 +523,7 @@ def _gen_analysis():
     prompt = (
         "You are a friendly crypto analyst writing a short Telegram update.\n"
         f"Top coins, 24h change: {top_line}\n"
-        f"Biggest 24h movers among the top 100: {movers or 'n/a'}\n"
+        f"Biggest 24h movers among the top 200: {movers or 'n/a'}\n"
         f"Overall the top-10 market is {trend}, {avg:+.2f}% on average over 24h.\n{news}\n\n"
         "TASK: write 2-3 sentences of market analysis. If the headlines contain IMPORTANT events "
         "(hacks, laws, court cases, ETFs, big moves), explain what happened and how it may affect "
@@ -724,7 +724,7 @@ def get_indices(max_age: float = None) -> dict:
             logger.warning("Fear & Greed unavailable: %s", e)
         try:
             dom = float(fetch_json("https://api.coingecko.com/api/v3/global",
-                                   retries=2)["data"]["market_cap_percentage"]["btc"])
+                                    retries=2)["data"]["market_cap_percentage"]["btc"])
         except Exception as e:
             logger.warning("BTC dominance unavailable: %s", e)
         if fng or dom is not None:
@@ -758,7 +758,7 @@ def mood_line(data: list, lang: str) -> str:
 
 
 def top_coins_snapshot(data: list) -> list:
-    """Список топ-100 для выбора «своих монет» в мини-приложении."""
+    """Список топ-200 для выбора «своих монет» в мини-приложении."""
     return [{"id": c["id"], "symbol": c["symbol"].upper(), "name": c.get("name", "")} for c in data]
 
 
@@ -852,7 +852,7 @@ def compose_weekly(s: dict, game_line: str = None, now: datetime = None):
     summary = [lab["weekly_best"].format(sym=html.escape(best["symbol"].upper()), chg=fmt_change(best[key]))]
     if worst["id"] != best["id"]:
         summary.append(lab["weekly_worst"].format(sym=html.escape(worst["symbol"].upper()),
-                                                   chg=fmt_change(worst[key])))
+                                                    chg=fmt_change(worst[key])))
     parts.append("\n".join(summary))
     lines = []
     for i, c in enumerate(rows, start=1):
@@ -868,3 +868,6 @@ def compose_weekly(s: dict, game_line: str = None, now: datetime = None):
     if game_line:
         parts.append(game_line)
     return "\n\n".join(parts)
+
+
+# End of file
