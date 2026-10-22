@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Settings</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:var(--tg-theme-bg-color,#fff);--tx:var(--tg-theme-text-color,#111);--hint:var(--tg-theme-hint-color,#707579);--sec:var(--tg-theme-secondary-bg-color,#f0f0f3);--btn:var(--tg-theme-button-color,#2481cc);--btx:var(--tg-theme-button-text-color,#fff)}
+@media(prefers-color-scheme:dark){:root{--bg:var(--tg-theme-bg-color,#1c1c1e);--tx:var(--tg-theme-text-color,#f2f2f7);--hint:var(--tg-theme-hint-color,#98989f);--sec:var(--tg-theme-secondary-bg-color,#000)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--sec);color:var(--tx);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:12px 12px calc(96px + env(safe-area-inset-bottom))}
+h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--hint);margin:18px 6px 6px}
+.card{background:var(--bg);border-radius:14px;padding:2px 14px}
+.row{padding:11px 0;border-bottom:1px solid var(--sec)}
+.row:last-child{border-bottom:0}
+.line{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.hint{color:var(--hint);font-size:13px;margin-top:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{border:0;border-radius:16px;padding:6px 12px;font:inherit;background:var(--sec);color:var(--tx)}
+.chip.on{background:var(--btn);color:var(--btx)}
+select{font:inherit;color:var(--tx);background:var(--sec);border:0;border-radius:8px;padding:6px 8px;max-width:60%}
+.sw{position:relative;width:46px;height:28px;flex:none}
+.sw input{opacity:0;width:100%;height:100%;margin:0;position:absolute;z-index:1}
+.sw i{position:absolute;inset:0;border-radius:14px;background:var(--sec);transition:.2s}
+.sw i:after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px #0004}
+.sw input:checked+i{background:var(--btn)}
+.sw input:checked+i:after{transform:translateX(18px)}
+.info{background:var(--bg);border-radius:14px;padding:12px 14px;font-size:14px}
+.info b{display:block;color:var(--hint);font-weight:500;font-size:13px}
+.btn{width:100%;margin-top:14px;border:0;border-radius:12px;padding:12px;font:inherit;background:var(--bg);color:var(--btn)}
+#save{display:none;position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));background:var(--btn);color:var(--btx);font-weight:600}
+input#q{width:100%;margin-top:8px;border:0;border-radius:8px;padding:8px 10px;font:inherit;background:var(--sec);color:var(--tx)}
+.clist{max-height:240px;overflow:auto;margin-top:8px;border-radius:10px;background:var(--sec)}
+.coin{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;background:none;color:var(--tx);font:inherit;padding:9px 10px;text-align:left}
+.coin.on{background:var(--btn);color:var(--btx)}
+#toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:#000c;color:#fff;padding:8px 14px;border-radius:10px;opacity:0;transition:.25s;pointer-events:none;z-index:9}
+#toast.show{opacity:1}
+#msg{text-align:center;color:var(--hint);padding:60px 20px}
+</style>
+</head>
+<body>
+<div id="msg">…</div>
+<div id="app" hidden></div>
+<button class="btn" id="save"></button>
+<div id="toast"></div>
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const $ = s => document.querySelector(s);
+
+// порядок языков: en, ru, fr, es, de
+const LANGS = ['en', 'ru', 'fr', 'es', 'de'];
+const LN = { en: 'English', ru: 'Русский', fr: 'Français', es: 'Español', de: 'Deutsch' };
+const LOC = ['en-GB', 'ru-RU', 'fr-FR', 'es-ES', 'de-DE'];
+const CUR = { usd: '$', eur: '€', rub: '₽', uah: '₴', kzt: '₸' };
+const N = {
+  lang: ['Language', 'Язык', 'Langue', 'Idioma', 'Sprache'],
+  enabled: ['Receive reports', 'Получать отчёты', 'Recevoir les envois', 'Recibir envíos', 'Berichte erhalten'],
+  report_interval: ['Prices frequency', 'Как часто присылать курс', 'Fréquence des cours', 'Frecuencia de precios', 'Häufigkeit der Kurse'],
+  anchor_hour: ['Count from hour', 'Отсчёт от часа', 'Compter à partir de', 'Contar desde la hora', 'Zählen ab Stunde'],
+  analytics_enabled: ['AI analytics', 'AI-аналитика', 'Analyse IA', 'Análisis con IA', 'KI-Analyse'],
+  analytics_interval: ['Analytics frequency', 'Как часто присылать аналитику', 'Fréquence de l’analyse', 'Frecuencia del análisis', 'Häufigkeit der Analyse'],
+  facts_enabled: ['Fun crypto facts', 'Интересные факты о крипте', 'Anecdotes crypto', 'Datos curiosos cripto', 'Krypto-Fakten'],
+  facts_interval: ['Facts frequency', 'Как часто присылать факты', 'Fréquence des anecdotes', 'Frecuencia de datos', 'Häufigkeit der Fakten'],
+  coins_count: ['Coins in the list', 'Сколько монет в списке', 'Nombre de cryptos', 'Monedas en la lista', 'Anzahl Coins'],
+  list_mode: ['What to show', 'Что показывать', 'Affichage', 'Qué mostrar', 'Anzeige'],
+  currency: ['Currency', 'Валюта', 'Devise', 'Moneda', 'Währung'],
+  change_period: ['Price change period', 'Период изменения цены', 'Période de variation', 'Periodo de variación', 'Zeitraum der Änderung'],
+  show_change: ['Show price change', 'Показывать изменение цены', 'Afficher la variation', 'Mostrar variación', 'Änderung anzeigen'],
+  show_emoji: ['Coin emoji', 'Эмодзи у монет', 'Emoji des cryptos', 'Emojis de monedas', 'Coin-Emojis'],
+  include_stables: ['Show stablecoins', 'Показывать стейблкоины', 'Afficher les stablecoins', 'Mostrar stablecoins', 'Stablecoins anzeigen'],
+  days: ['Days of the week', 'Дни недели', 'Jours de la semaine', 'Días de la semana', 'Wochentage'],
+  quiet_enabled: ['Quiet hours', 'Тихие часы', 'Heures calmes', 'Horas de silencio', 'Ruhezeiten'],
+  quiet_start: ['Do not disturb from', 'Не беспокоить с', 'Ne pas déranger de', 'No molestar desde', 'Nicht stören von'],
+  quiet_end: ['until', 'до', 'à', 'hasta', 'bis'],
+  tz: ['Time zone', 'Часовой пояс', 'Fuseau horaire', 'Zona horaria', 'Zeitzone'],
+  custom_coins: ['Your coins (up to 10)', 'Ваши монеты (до 10)', 'Vos cryptos (jusqu’à 10)', 'Tus monedas (hasta 10)', 'Ihre Coins (bis zu 10)'],
+  show_indices: ['Fear & Greed and BTC dominance', 'Страх/жадность и доминирование BTC', 'Peur & Avidité et dominance BTC', 'Miedo/Codicia y dominancia BTC', 'Angst/Gier und BTC-Dominanz'],
+  move_alerts: ['Sharp move alerts', 'Алерты о резких движениях', 'Alertes de mouvements brusques', 'Alertas de movimientos bruscos', 'Alarme bei starken Bewegungen'],
+  move_threshold: ['Alert threshold (1 hour)', 'Порог алерта (за 1 час)', 'Seuil d’alerte (1 heure)', 'Umbral de alerta (1 hora)', 'Alarmschwelle (1 Stunde)'],
+};
+const H = {
+  report_interval: ['Sent exactly at the top of the hour', 'Отправляется ровно в начале часа', 'Envoyé pile à l’heure', 'Se envía en punto', 'Wird zur vollen Stunde gesendet'],
+  anchor_hour: ['Slots are counted from this hour (your time zone)', 'Слоты считаются от этого часа (ваш пояс)', 'Les créneaux partent de cette heure (votre fuseau)', 'Los horarios se cuentan desde esta hora (tu zona)', 'Slots zählen ab dieser Stunde (Ihre Zeitzone)'],
+  facts_enabled: ['Sent when it is not analytics time; a lone fact is silent', 'Приходит, когда нет аналитики; отдельный факт без звука', 'Hors créneaux d’analyse ; une anecdote seule est silencieuse', 'Cuando no toca análisis; un dato suelto va en silencio', 'Kommt, wenn keine Analyse fällig ist; ein einzelner Fakt ist lautlos'],
+  move_alerts: ['Only for your coins; quiet hours apply', 'Только по вашим монетам; тихие часы учитываются', 'Seulement vos cryptos ; heures calmes respectées', 'Solo tus monedas; se respetan las horas de silencio', 'Nur für Ihre Coins; Ruhezeiten gelten'],
+  quiet_enabled: ['No messages are sent at these hours', 'В это время сообщения не приходят', 'Aucun message à ces heures', 'No se envían mensajes en este horario', 'In dieser Zeit werden keine Nachrichten gesendet'],
+};
+const V = {
+  list_mode: {
+    top: ['By market cap', 'По капитализации', 'Par capitalisation', 'Por capitalización', 'Nach Marktkap.'],
+    gainers: ['Top gainers', 'Лидеры роста', 'Plus fortes hausses', 'Mayores subidas', 'Größte Gewinner'],
+    losers: ['Top losers', 'Лидеры падения', 'Plus fortes baisses', 'Mayores bajadas', 'Größte Verlierer'],
+    custom: ['My coins', 'Мои монеты', 'Mes cryptos', 'Mis monedas', 'Meine Coins'],
+  },
+};
+const D = [
+  ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+  ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'], ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+  ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+];
+const G = [
+  ['🌐', ['Language', 'Язык', 'Langue', 'Idioma', 'Sprache'], ['lang']],
+  ['📬', ['Delivery', 'Рассылка', 'Envoi', 'Envío', 'Versand'], ['enabled', 'report_interval', 'anchor_hour']],
+  ['🧠', ['Analytics & facts', 'Аналитика и факты', 'Analyse et anecdotes', 'Análisis y datos', 'Analyse & Fakten'],
+    ['analytics_enabled', 'analytics_interval', 'facts_enabled', 'facts_interval']],
+  ['📊', ['Content', 'Содержимое', 'Contenu', 'Contenido', 'Inhalt'],
+    ['list_mode', 'custom_coins', 'coins_count', 'currency', 'change_period', 'show_change', 'show_emoji', 'include_stables', 'show_indices']],
+  ['🚨', ['Alerts', 'Алерты', 'Alertes', 'Alertas', 'Alarme'], ['move_alerts', 'move_threshold']],
+  ['🌙', ['Schedule', 'Расписание', 'Planning', 'Horario', 'Zeitplan'], ['days', 'quiet_enabled', 'quiet_start', 'quiet_end', 'tz']],
+];
+const UI = {
+  save: ['Save', 'Сохранить', 'Enregistrer', 'Guardar', 'Speichern'],
+  saved: ['Saved ✓', 'Сохранено ✓', 'Enregistré ✓', 'Guardado ✓', 'Gespeichert ✓'],
+  now: ['📨 Send now', '📨 Отправить сейчас', '📨 Envoyer maintenant', '📨 Enviar ahora', '📨 Jetzt senden'],
+  sent: ['Sending…', 'Отправляется…', 'Envoi…', 'Enviando…', 'Wird gesendet…'],
+  err: ['Error: ', 'Ошибка: ', 'Erreur : ', 'Error: ', 'Fehler: '],
+  open: ['Open the settings from Telegram', 'Откройте настройки из Telegram'],
+  nr: ['Next prices', 'Следующий курс', 'Prochains cours', 'Próximos precios', 'Nächste Kurse'],
+  na: ['Next analytics', 'Следующая аналитика', 'Prochaine analyse', 'Próximo análisis', 'Nächste Analyse'],
+  nf: ['Next fact', 'Следующий факт', 'Prochaine anecdote', 'Próximo dato', 'Nächster Fakt'],
+  off: ['off', 'выключено', 'désactivé', 'desactivado', 'aus'],
+  detect: ['Detect', 'Определить', 'Détecter', 'Detectar', 'Erkennen'],
+  hh: [' h', ' ч', ' h', ' h', ' Std.'],
+  search: ['Search coin…', 'Поиск монеты…', 'Chercher…', 'Buscar moneda…', 'Coin suchen…'],
+  noList: ['Coin list is loading, try again in a minute', 'Список монет загружается, попробуйте через минуту', 'La liste se charge, réessayez dans une minute', 'Cargando la lista, inténtalo en un minuto', 'Liste wird geladen, bitte in einer Minute erneut versuchen'],
+};
+
+let S = null, spec = null, tzs = [], coins = [], q = '', orig = '', next = {};
+const esc = x => String(x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const li = () => Math.max(0, LANGS.indexOf(S && S.lang));
+const t = (obj, k) => obj[k][li()];
+const hours = n => String(n).padStart(2, '0') + ':00';
+
+async function api(method, path, body) {
+  const r = await fetch('/api/' + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg ? tg.initData : '' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) {
+    let d = ''; try { d = (await r.json()).detail; } catch (e) {}
+    throw new Error(d || r.status);
+  }
+  return r.json();
+}
+
+function toast(text) {
+  const el = $('#toast'); el.textContent = text; el.classList.add('show');
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function enumLabel(k, v) {
+  if (V[k]) return V[k][v][li()];
+  if (k === 'lang') return LN[v];
+  if (k.endsWith('_interval')) return v + UI.hh[li()];
+  if (k === 'currency') return v.toUpperCase() + ' ' + CUR[v];
+  if (k === 'move_threshold') return v + '%';
+  return String(v);
+}
+
+function control(k) {
+  const sp = spec[k], v = S[k];
+  const name = N[k][li()], hint = H[k] ? `<div class="hint">${H[k][li()]}</div>` : '';
+  if (sp.type === 'bool')
+    return `<div class="row"><div class="line"><span>${name}</span><label class="sw"><input type="checkbox" data-k="${k}" ${v ? 'checked' : ''}><i></i></label></div>${hint}</div>`;
+  if (sp.type === 'enum')
+    return `<div class="row"><div>${name}</div>${hint}<div class="chips">${sp.values.map(x =>
+      `<button class="chip ${x === v ? 'on' : ''}" data-k="${k}" data-v='${JSON.stringify(x)}'>${enumLabel(k, x)}</button>`).join('')}</div></div>`;
+  if (sp.type === 'int') {
+    const opts = Array.from({ length: sp.max - sp.min + 1 }, (_, i) => i + sp.min)
+      .map(x => `<option value="${x}" ${x === v ? 'selected' : ''}>${hours(x)}</option>`).join('');
+    return `<div class="row"><div class="line"><span>${name}</span><select data-k="${k}" data-n="1">${opts}</select></div>${hint}</div>`;
+  }
+  if (sp.type === 'coins') {
+    const chips = v.map(id => { const c = coins.find(x => x.id === id);
+      return `<button class="chip on" data-coin="${esc(id)}">${esc(c ? c.symbol : id)} ✕</button>`; }).join('');
+    return `<div class="row"><div class="line"><span>${name}</span><span class="hint">${v.length}/${sp.max}</span></div>
+      <div class="chips">${chips}</div><input id="q" placeholder="${UI.search[li()]}" value="${esc(q)}" autocomplete="off">
+      <div class="clist" id="clist">${coinList()}</div></div>`;
+  }
+  if (sp.type === 'days')
+    return `<div class="row"><div>${name}</div><div class="chips">${D[li()].map((d, i) =>
+      `<button class="chip ${v.includes(i) ? 'on' : ''}" data-day="${i}">${d}</button>`).join('')}</div></div>`;
+  if (sp.type === 'tz') {
+    const list = tzs.includes(v) ? tzs : [v, ...tzs];
+    return `<div class="row"><div class="line"><span>${name}</span><select data-k="tz">${list.map(z =>
+      `<option ${z === v ? 'selected' : ''}>${z}</option>`).join('')}</select></div>
+      <div class="chips"><button class="chip" id="detect">📍 ${UI.detect[li()]}</button></div></div>`;
+  }
+  return '';
+}
+
+function coinList() {
+  if (!coins.length) return `<div class="hint" style="padding:10px">${UI.noList[li()]}</div>`;
+  const f = q.trim().toLowerCase();
+  return coins.map((c, i) => [c, i]).filter(([c]) => !f || c.symbol.toLowerCase().includes(f) || c.name.toLowerCase().includes(f))
+    .map(([c, i]) => { const on = S.custom_coins.includes(c.id);
+      return `<button class="coin ${on ? 'on' : ''}" data-coin="${esc(c.id)}"><span>${i + 1}. <b>${esc(c.symbol)}</b> ${esc(c.name)}</span><span>${on ? '✓' : ''}</span></button>`; }).join('');
+}
+
+function visible(k) {
+  if (k === 'enabled' || k === 'lang') return true;
+  if (!S.enabled) return false;
+  if (k === 'analytics_interval') return S.analytics_enabled;
+  if (k === 'facts_interval') return S.facts_enabled;
+  if (k === 'custom_coins') return S.list_mode === 'custom';
+  if (k === 'coins_count' || k === 'include_stables') return S.list_mode !== 'custom';
+  if (k === 'quiet_start' || k === 'quiet_end') return S.quiet_enabled;
+  if (k === 'move_threshold') return S.move_alerts;
+  if (k === 'change_period') return S.show_change || S.list_mode === 'gainers' || S.list_mode === 'losers';
+  return true;
+}
+
+function fmtNext(iso) {
+  if (!iso || !S.enabled) return UI.off[li()];
+  return new Date(iso).toLocaleString(LOC[li()], {
+    timeZone: S.tz, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function render() {
+  const info = `<div class="info"><b>${UI.nr[li()]}</b>${fmtNext(next.r)}` +
+    (S.analytics_enabled ? `<b style="margin-top:8px">${UI.na[li()]}</b>${fmtNext(next.a)}` : '') +
+    (S.facts_enabled ? `<b style="margin-top:8px">${UI.nf[li()]}</b>${fmtNext(next.f)}` : '') + '</div>';
+  let html = info;
+  for (const [ico, title, keys] of G) {
+    const rows = keys.filter(visible).map(control).join('');
+    if (rows) html += `<h2>${ico} ${title[li()]}</h2><div class="card">${rows}</div>`;
+  }
+  if (S.enabled) html += `<button class="btn" id="now">${UI.now[li()]}</button>`;
+  $('#app').innerHTML = html;
+  const dirty = JSON.stringify(S) !== orig;
+  if (tg) {
+    const mb = tg.MainButton; mb.setText(UI.save[li()]);
+    dirty ? (mb.show(), tg.enableClosingConfirmation()) : (mb.hide(), tg.disableClosingConfirmation());
+  } else { $('#save').style.display = dirty ? 'block' : 'none'; $('#save').textContent = UI.save[li()]; }
+}
+
+function apply(res) {
+  S = res.settings; orig = JSON.stringify(S);
+  next = { r: res.next_report_at, a: res.next_analytics_at, f: res.next_facts_at };
+}
+
+async function save() {
+  try { apply(await api('PUT', 'settings', S)); render(); toast(UI.saved[li()]); }
+  catch (e) { toast(UI.err[li()] + e.message); }
+}
+
+document.addEventListener('click', async e => {
+  const el = e.target.closest('button'); if (!el || !S) return;
+  const sc = ($('#clist') || {}).scrollTop || 0;
+  if (el.dataset.coin) {
+    const id = el.dataset.coin, i = S.custom_coins.indexOf(id);
+    if (i >= 0) S.custom_coins.splice(i, 1); else if (S.custom_coins.length < spec.custom_coins.max) S.custom_coins.push(id);
+    render(); if ($('#clist')) $('#clist').scrollTop = sc; return;
+  }
+  if (el.dataset.k) S[el.dataset.k] = JSON.parse(el.dataset.v);
+  else if (el.dataset.day !== undefined) {
+    const d = +el.dataset.day, set = new Set(S.days);
+    set.has(d) ? (set.size > 1 && set.delete(d)) : set.add(d);
+    S.days = [...set].sort();
+  } else if (el.id === 'detect') {
+    const z = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (z) { S.tz = z; if (!tzs.includes(z)) tzs = [z, ...tzs]; }
+  } else if (el.id === 'now') {
+    try { await api('POST', 'send_now'); toast(UI.sent[li()]); } catch (er) { toast(UI.err[li()] + er.message); }
+    return;
+  } else if (el.id === 'save') { return save(); }
+  else return;
+  render();
+});
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'q') { q = e.target.value; $('#clist').innerHTML = coinList(); }
+});
+
+document.addEventListener('change', e => {
+  const el = e.target; if (!S || !el.dataset.k) return;
+  S[el.dataset.k] = el.type === 'checkbox' ? el.checked : (el.dataset.n ? +el.value : el.value);
+  render();
+});
+
+(async () => {
+  if (!tg || !tg.initData) { $('#msg').textContent = UI.open[0] + ' / ' + UI.open[1]; return; }
+  if (tg.MainButton) tg.MainButton.onClick(save);
+  try {
+    const res = await api('GET', 'settings');
+    spec = res.spec; tzs = res.tz_choices; coins = res.coins || []; apply(res);
+    document.documentElement.lang = S.lang;
+    $('#msg').hidden = true; $('#app').hidden = false; render();
+  } catch (e) { $('#msg').textContent = UI.err[0] + e.message; }
+})();
+</script>
+</body>
+</html>
