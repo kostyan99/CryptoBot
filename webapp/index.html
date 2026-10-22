@@ -6,8 +6,8 @@
 <title>Settings</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-:root{--bg:var(--tg-theme-bg-color,#fff);--tx:var(--tg-theme-text-color,#111);--hint:var(--tg-theme-hint-color,#707579);--sec:var(--tg-theme-secondary-bg-color,#f0f0f3);--btn:var(--tg-theme-button-color,#2481cc);--btx:var(--tg-theme-button-text-color,#fff)}
-@media(prefers-color-scheme:dark){:root{--bg:var(--tg-theme-bg-color,#1c1c1e);--tx:var(--tg-theme-text-color,#f2f2f7);--hint:var(--tg-theme-hint-color,#98989f);--sec:var(--tg-theme-secondary-bg-color,#000)}}
+:root{--bg:var(--tg-theme-bg-color,#fff);--tx:var(--tg-theme-text-color,#111);--hint:var(--tg-theme-hint-color,#707579);--sec:var(--tg-theme-secondary-bg-color,#f0f0f3);--btn:var(--tg-theme-button-color,#2f8cff);--btx:var(--tg-theme-button-text-color,#fff);--danger:#d92d20;--danger-text:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:var(--tg-theme-bg-color,#1c1c1e);--tx:var(--tg-theme-text-color,#f2f2f7);--hint:var(--tg-theme-hint-color,#98989f);--sec:var(--tg-theme-secondary-bg-color,#2c2c2e);--btn:var(--tg-theme-button-color,#3a86ff);--btx:var(--tg-theme-button-text-color,#fff);--danger:#ff6b5a;--danger-text:#1c1c1e}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--sec);color:var(--tx);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:12px 12px calc(96px + env(safe-area-inset-bottom))}
 h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--hint);margin:18px 6px 6px}
@@ -29,7 +29,9 @@ select{font:inherit;color:var(--tx);background:var(--sec);border:0;border-radius
 .info{background:var(--bg);border-radius:14px;padding:12px 14px;font-size:14px}
 .info b{display:block;color:var(--hint);font-weight:500;font-size:13px}
 .btn{width:100%;margin-top:14px;border:0;border-radius:12px;padding:12px;font:inherit;background:var(--bg);color:var(--btn)}
+.btn.danger{background:var(--danger);color:var(--danger-text);font-weight:600}
 #save{display:none;position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));background:var(--btn);color:var(--btx);font-weight:600}
+#delete-data{margin-bottom:12px}
 input#q{width:100%;margin-top:8px;border:0;border-radius:8px;padding:8px 10px;font:inherit;background:var(--sec);color:var(--tx)}
 .clist{max-height:240px;overflow:auto;margin-top:8px;border-radius:10px;background:var(--sec)}
 .coin{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;background:none;color:var(--tx);font:inherit;padding:9px 10px;text-align:left}
@@ -82,9 +84,9 @@ const N = {
 };
 const H = {
   report_interval: ['Sent exactly at the top of the hour', 'Отправляется ровно в начале часа', 'Envoyé pile à l’heure', 'Se envía en punto', 'Wird zur vollen Stunde gesendet'],
-  anchor_hour: ['Slots are counted from this hour (your time zone)', 'Слоты считаются от этого часа (ваш пояс)', 'Les créneaux partent de cette heure (votre fuseau)', 'Los horarios se cuentan desde esta hora (tu zona)', 'Slots zählen ab dieser Stunde (Ihre Zeitzone)'],
-  facts_enabled: ['Sent when it is not analytics time; a lone fact is silent', 'Приходит, когда нет аналитики; отдельный факт без звука', 'Hors créneaux d’analyse ; une anecdote seule est silencieuse', 'Cuando no toca análisis; un dato suelto va en silencio', 'Kommt, wenn keine Analyse fällig ist; ein einzelner Fakt ist lautlos'],
-  move_alerts: ['Only for your coins; quiet hours apply', 'Только по вашим монетам; тихие часы учитываются', 'Seulement vos cryptos ; heures calmes respectées', 'Solo tus monedas; se respetan las horas de silencio', 'Nur für Ihre Coins; Ruhezeiten gelten'],
+  anchor_hour: ['Slots are counted from this hour (your time zone)', 'Слоты считаются от этого часа (ваш пояс)', 'Les créneaux partent de cette heure (votre fuseau horaire)', 'Los intervalos comienzan desde esta hora (tu zona horaria)', 'Zeitfenster zählen ab dieser Stunde (deine Zeitzone)'],
+  facts_enabled: ['Sent when it is not analytics time; a lone fact is silent', 'Приходит, когда нет аналитики; отдельный факт без звука', 'Hors créneau analyse ; un fait seul reste silencieux', 'Se envía cuando no hay análisis; un dato solo es silencioso', 'Wird gesendet, wenn keine Analyse aktiv ist; ein einzelner Fakt bleibt lautlos'],
+  move_alerts: ['Only for your coins; quiet hours apply', 'Только по вашим монетам; тихие часы учитываются', 'Seulement vos cryptos ; heures calmes respectées', 'Solo para tus monedas; se aplican horas de silencio', 'Nur für deine Coins; Ruhezeiten gelten'],
   quiet_enabled: ['No messages are sent at these hours', 'В это время сообщения не приходят', 'Aucun message à ces heures', 'No se envían mensajes en este horario', 'In dieser Zeit werden keine Nachrichten gesendet'],
 };
 const V = {
@@ -123,8 +125,11 @@ const UI = {
   off: ['off', 'выключено', 'désactivé', 'desactivado', 'aus'],
   detect: ['Detect', 'Определить', 'Détecter', 'Detectar', 'Erkennen'],
   hh: [' h', ' ч', ' h', ' h', ' Std.'],
-  search: ['Search coin…', 'Поиск монеты…', 'Chercher…', 'Buscar moneda…', 'Coin suchen…'],
-  noList: ['Coin list is loading, try again in a minute', 'Список монет загружается, попробуйте через минуту', 'La liste se charge, réessayez dans une minute', 'Cargando la lista, inténtalo en un minuto', 'Liste wird geladen, bitte in einer Minute erneut versuchen'],
+  search: ['Search coin…', 'Поис�� монеты…', 'Chercher…', 'Buscar moneda…', 'Coin suchen…'],
+  noList: ['Coin list is loading, try again in a minute', 'Список монет загружается, попробуйте через минуту', 'La liste se charge, réessayez dans une minute', 'La lista de monedas está cargando, inténtalo en un minuto', 'Die Coin-Liste lädt, versuche es in einer Minute erneut'],
+  delete: ['Delete all data', 'Удалить все данные', 'Supprimer toutes les données', 'Eliminar todos los datos', 'Alle Daten löschen'],
+  deleteConfirm: ['This will permanently delete all your data. Continue?', 'Это удалит все ваши данные без возможности восстановления. Продолжить?', 'Cela supprimera définitivement toutes vos données. Continuer ?', 'Esto eliminará todos tus datos de forma permanente. ¿Continuar?', 'Dadurch werden alle Ihre Daten dauerhaft gelöscht. Fortfahren?'],
+  deleted: ['All data deleted', 'Все данные удалены', 'Toutes les données ont été supprimées', 'Todos los datos fueron eliminados', 'Alle Daten wurden gelöscht'],
 };
 
 let S = null, spec = null, tzs = [], coins = [], q = '', orig = '', next = {};
@@ -229,6 +234,7 @@ function render() {
     if (rows) html += `<h2>${ico} ${title[li()]}</h2><div class="card">${rows}</div>`;
   }
   if (S.enabled) html += `<button class="btn" id="now">${UI.now[li()]}</button>`;
+  html += `<button class="btn danger" id="delete-data">${UI.delete[li()]}</button>`;
   $('#app').innerHTML = html;
   const dirty = JSON.stringify(S) !== orig;
   if (tg) {
@@ -265,6 +271,15 @@ document.addEventListener('click', async e => {
     if (z) { S.tz = z; if (!tzs.includes(z)) tzs = [z, ...tzs]; }
   } else if (el.id === 'now') {
     try { await api('POST', 'send_now'); toast(UI.sent[li()]); } catch (er) { toast(UI.err[li()] + er.message); }
+    return;
+  } else if (el.id === 'delete-data') {
+    if (!window.confirm(UI.deleteConfirm[li()])) return;
+    try {
+      await api('DELETE', 'me');
+      toast(UI.deleted[li()]);
+      if (tg && tg.close) tg.close();
+      else setTimeout(() => location.reload(), 800);
+    } catch (er) { toast(UI.err[li()] + er.message); }
     return;
   } else if (el.id === 'save') { return save(); }
   else return;
