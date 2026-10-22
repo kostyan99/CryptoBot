@@ -240,10 +240,7 @@ function render() {
     if (rows) html += `<h2>${ico} ${title[li()]}</h2><div class="card">${rows}</div>`;
   }
   if (S.enabled) html += `<button class="btn" id="now">${UI.now[li()]}</button>`;
-  html += `<div class="inline-actions">` +
-    `<button class="btn secondary" id="toggle-game-hide">${S.game_hide_name ? UI.hideGameOn[li()] : UI.hideGameOff[li()]}</button>` +
-    `<button class="btn danger" id="delete-data">${UI.delete[li()]}</button>` +
-    `</div>`;
+  html += `<div class="inline-actions"><button class="btn danger" id="delete-data">${UI.delete[li()]}</button></div>`;
   $('#app').innerHTML = html;
   const dirty = JSON.stringify(S) !== orig;
   if (tg) {
@@ -280,10 +277,6 @@ document.addEventListener('click', async e => {
     if (z) { S.tz = z; if (!tzs.includes(z)) tzs = [z, ...tzs]; }
   } else if (el.id === 'now') {
     try { await api('POST', 'send_now'); toast(UI.sent[li()]); } catch (er) { toast(UI.err[li()] + er.message); }
-    return;
-  } else if (el.id === 'toggle-game-hide') {
-    S.game_hide_name = !S.game_hide_name;
-    try { await save(); } catch (er) { toast(UI.err[li()] + er.message); }
     return;
   } else if (el.id === 'delete-data') {
     if (!window.confirm(UI.deleteConfirm[li()])) return;
