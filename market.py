@@ -282,7 +282,7 @@ def get_markets(currency: str = "usd", max_age: float = None) -> list:
             return entry["data"]
         url = (
             "https://api.coingecko.com/api/v3/coins/markets"
-            f"?vs_currency={currency}&order=market_cap_desc&per_page=100&page=1"
+            f"?vs_currency={currency}&order=market_cap_desc&per_page=200&page=1"
             "&sparkline=false&price_change_percentage=1h,24h,7d"
         )
         try:

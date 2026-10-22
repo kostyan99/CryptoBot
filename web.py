@@ -106,7 +106,7 @@ def payload(state) -> dict:
 
 
 def top_coins() -> list:
-    """Список топ-100 монет для выбора (его пишет бот в таблицу meta)."""
+    """Список топ-200 монет для выбора (его пишет бот в таблицу meta)."""
     try:
         raw = db.get_meta("top_coins")
         return json.loads(raw) if raw else []
