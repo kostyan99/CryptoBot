@@ -438,7 +438,7 @@ def _client(idx: int):
 
     if idx not in _gemini_clients:
         _gemini_clients[idx] = genai.Client(
-            api_key=config.GEMINI_KEYS[idx], http_options=types.HttpOptions(timeout=45000))
+            api_key=config.GEMINI_KEYS[idx], http_options=types.HttpOptions(timeout=90000))
     return _gemini_clients[idx]
 
 
@@ -460,8 +460,9 @@ def _parse_multi(raw: str) -> dict:
 
 
 def _call_gemini(prompt: str, parse):
-    """Перебирает ключи и модели; ответ должен пройти разбор `parse`, иначе пробуем дальше.
-    Возвращает результат разбора или None."""
+    """Перебирает ключи и модели; ответ должен пройти разбор `parse`, иначе пробуем следующий
+    вариант. Медленная модель (504/таймаут) не блокирует остальные: сразу идём дальше, а её
+    пропускаем на 15 минут. Возвращает результат разбора или None."""
     keys = config.GEMINI_KEYS
     if not keys:
         logger.warning("No Gemini API keys configured")
@@ -469,7 +470,7 @@ def _call_gemini(prompt: str, parse):
     from google.genai import types
 
     gen_config = types.GenerateContentConfig(temperature=0.8, response_mime_type="application/json")
-    deadline = time.time() + 90
+    deadline = time.time() + 240
     start = _rr["i"] % len(keys)
     for idx in [(start + k) % len(keys) for k in range(len(keys))]:
         for model in config.GEMINI_MODELS:
@@ -477,32 +478,28 @@ def _call_gemini(prompt: str, parse):
                 break
             if _cooldown.get((idx, model), 0) > time.time():
                 continue
-            for attempt in range(2):
-                try:
-                    resp = _client(idx).models.generate_content(
-                        model=model, contents=prompt, config=gen_config)
-                    result = parse(resp.text or "")
-                    _rr["i"] = idx + 1  # следующий запрос начнём со следующего ключа
-                    return result
-                except Exception as e:
-                    msg = str(e).replace(keys[idx], "***")
-                    logger.warning("Gemini key#%d %s failed: %s", idx + 1, model, msg[:200])
-                    if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
-                        _cooldown[(idx, model)] = time.time() + 600  # лимит: пропускаем 10 минут
-                        break
-                    transient = any(x in msg for x in ("500", "503", "504", "UNAVAILABLE",
-                                                        "overloaded", "timed out", "Timeout"))
-                    if transient and attempt == 0 and time.time() < deadline:
-                        time.sleep(3)
-                        continue
-                    break
+            try:
+                resp = _client(idx).models.generate_content(
+                    model=model, contents=prompt, config=gen_config)
+                result = parse(resp.text or "")
+                _rr["i"] = idx + 1  # следующий запрос начнём со следующего ключа
+                return result
+            except Exception as e:
+                msg = str(e).replace(keys[idx], "***")
+                logger.warning("Gemini key#%d %s failed: %s", idx + 1, model, msg[:200])
+                if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+                    _cooldown[(idx, model)] = time.time() + 600  # лимит: пропускаем 10 минут
+                elif any(x in msg for x in ("504", "DEADLINE_EXCEEDED", "timed out", "Timeout")):
+                    for k in range(len(keys)):  # медленная модель медленна для любого ключа: 15 минут
+                        _cooldown[(k, model)] = time.time() + 900
+                elif any(x in msg for x in ("500", "503", "UNAVAILABLE", "overloaded")):
+                    time.sleep(2)  # перегрузка: короткая пауза и следующий вариант
     logger.warning("All Gemini keys/models failed")
     alerts.notify(
         "⚠️ Gemini недоступен (все ключи/модели). Пользователям отдаётся прошлый текст "
         "или запасной. Причины — в логах: journalctl -u cryptobot | grep Gemini",
         key="gemini_fail", cooldown=3600)
     return None
-
 
 def _gen_analysis():
     try:
