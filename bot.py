@@ -1,5 +1,6 @@
 """Telegram-бот: команды, персональное расписание рассылки, админ-инструменты."""
 import collections
+import contextlib
 import html
 import json
 import logging
@@ -11,14 +12,17 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import requests
 import telebot
 from telebot import types
 from telebot.apihelper import ApiTelegramException
 
 import alerts
+import chart
 import config
 import db
 import game
+import help_texts
 import market as M
 import settings as S
 import social
@@ -170,7 +174,7 @@ T_V2 = {
                  "{summary}\n\n🔎 Send any ticker — <b>BTC</b>, <b>ETH</b> — for a coin card. /help — everything I can do.",
         "help": "📖 <b>What I can do</b>\n\n"
                 "🔎 Send any ticker — <b>BTC</b>, <b>eth</b>, <b>solana</b> — for a coin card\n\n"
-                "/top — prices now\n/price BTC — coin card\n"
+                "/top — prices now\n/price BTC — coin card · /chart BTC — price chart\n"
                 "/alerts — price alerts · <code>/alert BTC 100000</code>\n"
                 "/portfolio — your portfolio · <code>/add BTC 0.5</code>\n"
                 "/game — Up or Down? · /leaderboard — top players\n"
@@ -189,7 +193,7 @@ T_V2 = {
                  "{summary}\n\n🔎 Отправьте любой тикер — <b>BTC</b>, <b>ETH</b> — и получите карточку монеты. /help — всё, что я умею.",
         "help": "📖 <b>Что я умею</b>\n\n"
                 "🔎 Отправьте любой тикер — <b>BTC</b>, <b>eth</b>, <b>биткоин</b> — и получите карточку монеты\n\n"
-                "/top — курс сейчас\n/price BTC — карточка монеты\n"
+                "/top — курс сейчас\n/price BTC — карточка монеты · /chart BTC — график\n"
                 "/alerts — ценовые алерты · <code>/alert BTC 100000</code>\n"
                 "/portfolio — ваш портфель · <code>/add BTC 0.5</code>\n"
                 "/game — «Вверх или вниз?» · /leaderboard — рейтинг\n"
@@ -208,7 +212,7 @@ T_V2 = {
                  "{summary}\n\n🔎 Envoyez un ticker — <b>BTC</b>, <b>ETH</b> — pour sa fiche. /help — tout ce que je sais faire.",
         "help": "📖 <b>Ce que je sais faire</b>\n\n"
                 "🔎 Envoyez un ticker — <b>BTC</b>, <b>eth</b>, <b>solana</b> — pour la fiche de la crypto\n\n"
-                "/top — cours maintenant\n/price BTC — fiche d’une crypto\n"
+                "/top — cours maintenant\n/price BTC — fiche d’une crypto · /chart BTC — graphique\n"
                 "/alerts — alertes de prix · <code>/alert BTC 100000</code>\n"
                 "/portfolio — votre portefeuille · <code>/add BTC 0.5</code>\n"
                 "/game — hausse ou baisse ? · /leaderboard — classement\n"
@@ -227,7 +231,7 @@ T_V2 = {
                  "{summary}\n\n🔎 Envía cualquier ticker — <b>BTC</b>, <b>ETH</b> — para ver su ficha. /help — todo lo que sé hacer.",
         "help": "📖 <b>Qué sé hacer</b>\n\n"
                 "🔎 Envía cualquier ticker — <b>BTC</b>, <b>eth</b>, <b>solana</b> — para ver la ficha de la moneda\n\n"
-                "/top — precios ahora\n/price BTC — ficha de moneda\n"
+                "/top — precios ahora\n/price BTC — ficha de moneda · /chart BTC — gráfico\n"
                 "/alerts — alertas de precio · <code>/alert BTC 100000</code>\n"
                 "/portfolio — tu cartera · <code>/add BTC 0.5</code>\n"
                 "/game — ¿sube o baja? · /leaderboard — clasificación\n"
@@ -246,7 +250,7 @@ T_V2 = {
                  "{summary}\n\n🔎 Senden Sie einen Ticker — <b>BTC</b>, <b>ETH</b> — für die Coin-Karte. /help — alle Funktionen.",
         "help": "📖 <b>Was ich kann</b>\n\n"
                 "🔎 Senden Sie einen Ticker — <b>BTC</b>, <b>eth</b>, <b>solana</b> — für die Coin-Karte\n\n"
-                "/top — Kurse jetzt\n/price BTC — Coin-Karte\n"
+                "/top — Kurse jetzt\n/price BTC — Coin-Karte · /chart BTC — Kurschart\n"
                 "/alerts — Preisalarme · <code>/alert BTC 100000</code>\n"
                 "/portfolio — Ihr Portfolio · <code>/add BTC 0.5</code>\n"
                 "/game — Hoch oder runter? · /leaderboard — Rangliste\n"
@@ -263,22 +267,24 @@ T_V2 = {
 }
 for _l in T:
     T[_l].update(T_V2[_l])
+    T[_l]["help"] = help_texts.HELP[_l]  # подробная справка по разделам ({bot} — имя бота)
+    T[_l]["group_settings"] = help_texts.GROUP_SETTINGS[_l]
 
 # меню команд Telegram (порядок важен: самые нужные сверху)
-CMD_ORDER = ["top", "price", "alerts", "portfolio", "game", "leaderboard", "invite", "settings",
+CMD_ORDER = ["top", "price", "chart", "alerts", "portfolio", "game", "leaderboard", "invite", "settings",
              "profile", "stop", "start", "help"]
 CMD_DESC = {
-    "en": ["Prices now", "Coin card (e.g. /price BTC)", "Price alerts", "My portfolio", "Play Up or Down",
+    "en": ["Prices now", "Coin card (e.g. /price BTC)", "Price chart (/chart BTC 7d)", "Price alerts", "My portfolio", "Play Up or Down",
            "Leaderboard", "Invite friends", "Settings", "Choose a profile", "Stop reports", "Start reports", "Help"],
-    "ru": ["Курс сейчас", "Карточка монеты (/price BTC)", "Ценовые алерты", "Мой портфель", "Игра «Вверх или вниз»",
+    "ru": ["Курс сейчас", "Карточка монеты (/price BTC)", "График цены (/chart BTC 7d)", "Ценовые алерты", "Мой портфель", "Игра «Вверх или вниз»",
            "Рейтинг игроков", "Пригласить друзей", "Настройки", "Выбрать профиль", "Отключить рассылку",
            "Включить рассылку", "Помощь"],
-    "fr": ["Cours maintenant", "Fiche d’une crypto (/price BTC)", "Alertes de prix", "Mon portefeuille",
+    "fr": ["Cours maintenant", "Fiche d’une crypto (/price BTC)", "Graphique du cours (/chart BTC 7d)", "Alertes de prix", "Mon portefeuille",
            "Jouer : hausse ou baisse", "Classement", "Inviter des amis", "Paramètres", "Choisir un profil",
            "Arrêter les envois", "Activer les envois", "Aide"],
-    "es": ["Precios ahora", "Ficha de moneda (/price BTC)", "Alertas de precio", "Mi cartera", "Jugar: ¿sube o baja?",
+    "es": ["Precios ahora", "Ficha de moneda (/price BTC)", "Gráfico de precio (/chart BTC 7d)", "Alertas de precio", "Mi cartera", "Jugar: ¿sube o baja?",
            "Clasificación", "Invitar amigos", "Ajustes", "Elegir un perfil", "Detener envíos", "Activar envíos", "Ayuda"],
-    "de": ["Kurse jetzt", "Coin-Karte (/price BTC)", "Preisalarme", "Mein Portfolio", "Spiel: Hoch oder runter",
+    "de": ["Kurse jetzt", "Coin-Karte (/price BTC)", "Kurschart (/chart BTC 7d)", "Preisalarme", "Mein Portfolio", "Spiel: Hoch oder runter",
            "Rangliste", "Freunde einladen", "Einstellungen", "Profil wählen", "Versand stoppen",
            "Versand aktivieren", "Hilfe"],
 }
@@ -340,7 +346,7 @@ def settings_markup(lang: str, share: bool = False):
     row.append(types.InlineKeyboardButton(T[lang]["btn_game"], callback_data="g:new"))
     kb.row(*row)
     if share and INLINE_OK:
-        kb.row(types.InlineKeyboardButton(T[lang]["btn_share"], switch_inline_query=""))
+        kb.row(social.ShareButton(T[lang]["btn_share"]))
     return kb
 
 
@@ -412,11 +418,38 @@ class RateLimiter:
 
 
 limiter = RateLimiter(config.BROADCAST_RPS)
+# один общий пул потоков для всех рассылок (отчёты, алерты, итоги недели, /broadcast):
+# потоки не создаются заново каждые несколько минут, а общий лимит скорости всё равно один
+sender = ThreadPoolExecutor(max_workers=config.BROADCAST_WORKERS, thread_name_prefix="send")
+
+
+def is_group(chat_id) -> bool:
+    return int(chat_id) < 0  # у групп и каналов отрицательные id
+
+
+def for_chat(chat_id, markup):
+    """В группах Telegram запрещает кнопки мини-приложения (web_app) и отклоняет из-за них всё
+    сообщение; нижняя клавиатура там мешает всем участникам. Убираем и то и другое."""
+    if markup is None or not is_group(chat_id):
+        return markup
+    if isinstance(markup, types.ReplyKeyboardMarkup):
+        return None
+    if isinstance(markup, types.InlineKeyboardMarkup):
+        rows = [[b for b in row if b.web_app is None] for row in markup.keyboard]
+        rows = [r for r in rows if r]
+        if not rows:
+            return None
+        kb = types.InlineKeyboardMarkup()
+        for r in rows:
+            kb.row(*r)
+        return kb
+    return markup
 
 
 def send(chat_id, text: str, throttle: bool = False, markup=None, silent: bool = False) -> str:
     """Возвращает 'ok' | 'blocked' | 'error'."""
     parse_mode = "HTML"
+    markup = for_chat(chat_id, markup)
     for _ in range(4):
         if throttle:
             limiter.wait()
@@ -461,8 +494,59 @@ def deliver(item: tuple) -> str:
 # ------------------------------------------------------------------
 # Диспетчер: персональное расписание
 # ------------------------------------------------------------------
+IDLE_MAX_WAIT = 300  # даже без сигналов перепроверяем расписание не реже раза в 5 минут
+
+
+class Waker:
+    """Ожидание диспетчера: до ближайшего слота или до сигнала NOTIFY (кнопка «Отправить сейчас»,
+    изменение настроек, остановка бота). Раньше диспетчер опрашивал базу каждую секунду
+    (~86 тыс. запросов в сутки); теперь в тишине — пара запросов в 5 минут."""
+
+    def __init__(self):
+        self.conn = None
+
+    def _connect(self):
+        import psycopg
+        self.conn = psycopg.connect(config.DATABASE_URL, autocommit=True)
+        self.conn.execute(f"LISTEN {db.WAKE_CHANNEL}")
+
+    def wait(self, seconds: float) -> None:
+        seconds = max(0.2, min(seconds, IDLE_MAX_WAIT))
+        try:
+            if self.conn is None or self.conn.closed:
+                self._connect()
+            for _ in self.conn.notifies(timeout=seconds, stop_after=1):
+                pass
+        except Exception as e:  # база перезапускается и т.п.: ждём по-простому и переподключаемся
+            logger.warning("Dispatcher wake channel unavailable (%s), polling", e)
+            self.close()
+            stop.wait(min(seconds, 5))
+
+    def close(self) -> None:
+        try:
+            if self.conn is not None:
+                self.conn.close()
+        except Exception:
+            pass
+        self.conn = None
+
+
+def _idle_wait(waker: "Waker") -> None:
+    try:
+        due = db.next_due()
+    except Exception:
+        logger.exception("Dispatcher: next_due failed")
+        stop.wait(5)
+        return
+    if due is None:
+        waker.wait(IDLE_MAX_WAIT)
+    else:
+        waker.wait((due - datetime.now(timezone.utc)).total_seconds() + 0.2)
+
+
 def dispatcher_loop() -> None:
-    ex = ThreadPoolExecutor(max_workers=config.BROADCAST_WORKERS)
+    ex = sender
+    waker = Waker()
     while not stop.is_set():
         try:
             jobs, claimed, max_lag = db.claim_due(config.DISPATCH_BATCH)
@@ -472,7 +556,7 @@ def dispatcher_loop() -> None:
             continue
 
         if claimed == 0:
-            stop.wait(1.0)
+            _idle_wait(waker)
             continue
 
         if max_lag > 600:
@@ -534,7 +618,7 @@ def dispatcher_loop() -> None:
                 db.mark_facts_seen(seen)
             except Exception:
                 logger.exception("mark_facts_seen failed")
-    ex.shutdown(wait=True)
+    waker.close()
 
 
 # ------------------------------------------------------------------
@@ -579,14 +663,15 @@ def refill_facts(force: bool = False) -> None:
 def prepare() -> None:
     try:
         currencies, ana_langs, fact_langs = db.active_currencies_langs()
-        for cur in sorted(set(currencies) | {"usd"}):
-            try:
-                data = M.get_markets(cur, max_age=0)
-                if cur == "usd":  # список топ-100 для выбора «своих монет» в мини-приложении
-                    db.set_meta("top_coins", json.dumps(M.top_coins_snapshot(data), ensure_ascii=False))
-            except Exception as e:
-                logger.error("Prepare: market data unavailable (%s): %s", cur, e)
-            time.sleep(2)
+        # к CoinGecko — один запрос в USD; остальные валюты пересчитываются по его курсам
+        try:
+            data = M.get_markets("usd", max_age=0)
+            if M.source("usd") == "coingecko":  # список монет для мини-приложения
+                db.set_meta("top_coins", json.dumps(M.top_coins_snapshot(data), ensure_ascii=False))
+            for cur in set(currencies) - {"usd"}:
+                M.get_markets(cur)  # прогрев пересчёта (без запросов к API, кроме курсов раз в 10 мин)
+        except Exception as e:
+            logger.error("Prepare: market data unavailable: %s", e)
         M.get_indices(max_age=0)
         # к Gemini обращаемся редко: аналитика обновляется, только когда кэш старше AI_CACHE_MIN
         # (≈4 раза в сутки), факты пополняются пачкой ~2 раза в сутки; один запрос — все языки
@@ -614,7 +699,7 @@ def prepare_loop() -> None:
 def check_moves() -> None:
     """Ищет резкие движения за 1 час и шлёт пользователям алерты по их монетам."""
     try:
-        data = M.get_markets("usd", max_age=0)
+        data = M.get_markets("usd")  # данные не старше CACHE_TTL: лишний запрос к API не нужен
     except Exception as e:
         logger.warning("Move check skipped, no market data: %s", e)
         return
@@ -623,7 +708,7 @@ def check_moves() -> None:
         return
     now = datetime.now(timezone.utc)
     last_id, sent = 0, 0
-    with ThreadPoolExecutor(max_workers=config.BROADCAST_WORKERS) as ex:
+    with contextlib.nullcontext(sender) as ex:  # общий пул: не закрываем его после рассылки
         while True:
             users = db.alert_users(last_id, 500)
             if not users:
@@ -691,8 +776,7 @@ def weekly_loop() -> None:
                         items.append((chat_id, text, s["lang"], False, None,
                                       settings_markup(s["lang"], share=True)))
                 if items:
-                    with ThreadPoolExecutor(max_workers=config.BROADCAST_WORKERS) as ex:
-                        list(ex.map(deliver, items))
+                    list(sender.map(deliver, items))
                     count("weekly_sent", len(items))
         except Exception:
             logger.exception("Weekly loop failed")
@@ -730,8 +814,7 @@ def price_alerts_loop() -> None:
             items = [(chat_id, text, lang, not S.is_allowed_now(s, now), None, kb)
                      for chat_id, text, lang, s, kb in tools.check_price_alerts()]
             if items:
-                with ThreadPoolExecutor(max_workers=config.BROADCAST_WORKERS) as ex:
-                    results = list(ex.map(deliver, items))
+                results = list(sender.map(deliver, items))
                 count("price_alerts_sent", sum(1 for r in results if r == "ok"))
         except Exception:
             logger.exception("Price alerts check failed")
@@ -763,9 +846,32 @@ def game_loop() -> None:
         stop.wait(30)
 
 
+def refresh_inline() -> None:
+    """Подхватывает включение inline-режима (@BotFather -> /setinline) без перезапуска."""
+    global INLINE_OK, BOT_USERNAME
+    try:
+        me = bot.get_me()
+    except Exception:
+        return
+    BOT_USERNAME = me.username or BOT_USERNAME
+    if me.supports_inline_queries and not INLINE_OK:
+        INLINE_OK = True
+        logger.info("Inline mode is now enabled: sharing buttons are on")
+
+
 def heartbeat_loop() -> None:
     tz = ZoneInfo(config.DEFAULT_TZ)
+    last_identity = time.time()
     while not stop.is_set():
+        # после старта без интернета (например, после отключения света) донастраиваемся сами:
+        # имя бота и меню команд — раз в минуту, включение inline-режима — раз в 10 минут
+        missing = not BOT_USERNAME or not UI_READY
+        if (missing and time.time() - last_identity > 60) or \
+                (not INLINE_OK and time.time() - last_identity > 600):
+            last_identity = time.time()
+            refresh_inline()
+            if not UI_READY and BOT_USERNAME:
+                setup_telegram_ui()
         try:
             db.set_meta("bot_heartbeat", datetime.now(timezone.utc).isoformat())
             now = datetime.now(tz)
@@ -864,6 +970,55 @@ def show_card(chat_id: int, s: dict, coin_id: str, call=None) -> bool:
     return True
 
 
+def chart_markup(lang: str, coin: dict, days: int):
+    ct, cid = chart.CT[lang], coin["id"]
+    kb = types.InlineKeyboardMarkup()
+    kb.row(*[types.InlineKeyboardButton(("✅ " if d == days else "") + ct["p"][d], callback_data=f"ch:p:{cid}:{d}")
+             for d in chart.PERIODS])
+    row = [types.InlineKeyboardButton(ct["card"], callback_data=f"c:o:{cid}"),
+           types.InlineKeyboardButton(tools.TT[lang]["btn_alert"], callback_data=f"pa:menu:{cid}")]
+    kb.row(*row)
+    if INLINE_OK:
+        kb.row(social.ShareButton(tools.TT[lang]["btn_share"], coin["symbol"].upper()))
+    return kb
+
+
+def send_chart(chat_id: int, s: dict, coin_id: str, days: int, call=None) -> None:
+    """График цены картинкой; call — переключение периода в том же сообщении."""
+    lang = s["lang"]
+    days = days if days in chart.PERIODS else 1
+    coin = tools._coin_in(s["currency"], coin_id)
+    if coin is None:
+        send(chat_id, tools.TT[lang]["not_found"].format(q=html.escape(coin_id)))
+        return
+    try:
+        bot.send_chat_action(chat_id, "upload_photo")
+    except Exception:
+        pass
+    try:
+        watermark = f"@{BOT_USERNAME}" if BOT_USERNAME else ""
+        png, caption = chart.build(coin, s["currency"], days, s["tz"], lang, watermark)
+    except Exception as e:
+        logger.warning("chart failed for %s %s: %s", coin_id, days, e)
+        send(chat_id, chart.CT[lang]["fail"])
+        return
+    kb = chart_markup(lang, coin, days)
+    try:
+        if call is not None:
+            res = bot.edit_message_media(types.InputMediaPhoto(png, caption=caption, parse_mode="HTML"),
+                                         chat_id, call.message.message_id, reply_markup=kb)
+        else:
+            res = bot.send_photo(chat_id, png, caption=caption, parse_mode="HTML", reply_markup=kb)
+        if isinstance(png, bytes) and getattr(res, "photo", None):
+            chart.remember_file_id(coin, s["currency"], days, s["tz"], watermark, res.photo[-1].file_id)
+        count("charts")
+    except ApiTelegramException as e:
+        if e.error_code == 403:
+            db.mark_blocked(chat_id)
+        elif "not modified" not in str(e).lower():
+            raise
+
+
 def reward_referrer(referrer: int, new_user) -> None:
     try:
         db.game_add_points(referrer, social.REF_BONUS)
@@ -921,6 +1076,9 @@ def handle_top(message) -> None:
 def handle_settings(message) -> None:
     s = user(message)
     t = T[s["lang"]]
+    if is_group(message.chat.id):  # мини-приложение в группах недоступно
+        send(message.chat.id, t["group_settings"])
+        return
     # settings_markup всегда содержит кнопку игры, поэтому проверяем сам WEBAPP_URL
     if config.WEBAPP_URL:
         send(message.chat.id, t["settings"], markup=settings_markup(s["lang"]))
@@ -969,7 +1127,8 @@ def handle_delete(message) -> None:
 
 def handle_help(message) -> None:
     s = user(message, touch=False)
-    send(message.chat.id, T[s["lang"]]["help"], markup=main_keyboard(s["lang"]))
+    send(message.chat.id, T[s["lang"]]["help"].format(bot=BOT_USERNAME or "bot"),
+         markup=main_keyboard(s["lang"]))
 
 
 def _args(message) -> str:
@@ -986,6 +1145,23 @@ def handle_price(message) -> None:
     coin = tools.resolve(q)
     if coin is None or not show_card(message.chat.id, s, coin["id"]):
         send(message.chat.id, tt["not_found"].format(q=html.escape(q[:40])))
+
+
+def handle_chart(message) -> None:
+    """/chart BTC [24h|7d|30d]"""
+    s = user(message)
+    parts = _args(message).split()
+    if not parts:
+        send(message.chat.id, chart.CT[s["lang"]]["usage"])
+        return
+    days = chart.parse_period(parts[-1]) if len(parts) > 1 else None
+    name = " ".join(parts[:-1] if days else parts)
+    days = days or 1
+    coin = tools.resolve(name)
+    if coin is None:
+        send(message.chat.id, tools.TT[s["lang"]]["not_found"].format(q=html.escape(name[:40])))
+        return
+    send_chart(message.chat.id, s, coin["id"], days)
 
 
 def handle_alerts(message) -> None:
@@ -1124,7 +1300,7 @@ for _cmds, _h in (
     (["start"], handle_start), (["top"], handle_top), (["settings"], handle_settings),
     (["stop"], handle_stop), (["delete"], handle_delete), (["profile"], handle_profile),
     (["game"], handle_game), (["leaderboard"], handle_leaderboard), (["help"], handle_help),
-    (["price", "p"], handle_price), (["alerts"], handle_alerts), (["alert"], handle_alert),
+    (["price", "p"], handle_price), (["chart", "c"], handle_chart), (["alerts"], handle_alerts), (["alert"], handle_alert),
     (["portfolio", "pf"], handle_portfolio), (["add"], handle_add), (["invite", "ref"], handle_invite),
     (["cancel"], handle_cancel),
 ):
@@ -1153,7 +1329,9 @@ for _words, _h in ((START_WORDS, handle_start), (TOP_WORDS, handle_top), (SETTIN
     bot.message_handler(func=lambda m, w=_words: _private_text_in(m, w))(guarded(_h))
 
 # последним: любой другой текст в личке (тикер монеты или ответ на вопрос бота)
-bot.message_handler(func=lambda m: m.chat.type == "private" and bool(m.text) and not m.text.startswith("/"),
+# в группах — только ответы на вопросы бота (цена алерта, количество монет), остальной текст не трогаем
+bot.message_handler(func=lambda m: bool(m.text) and not m.text.startswith("/")
+                    and (m.chat.type == "private" or tools.has_pending(m.chat.id)),
                     content_types=["text"])(guarded(handle_text))
 
 
@@ -1163,7 +1341,7 @@ bot.message_handler(func=lambda m: m.chat.type == "private" and bool(m.text) and
 def edit(call, text: str, markup=None) -> None:
     try:
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
-                              parse_mode="HTML", reply_markup=markup)
+                              parse_mode="HTML", reply_markup=for_chat(call.message.chat.id, markup))
     except ApiTelegramException as e:
         if "not modified" not in str(e).lower():
             raise
@@ -1306,7 +1484,18 @@ def on_portfolio(call, parts: list, chat_id: int, s: dict):
     return None
 
 
-CALLBACK_PREFIXES = ("ob", "g", "c", "pa", "pf")
+def on_chart(call, parts: list, chat_id: int, s: dict):
+    if len(parts) < 4:
+        return None
+    days = _int(parts[3], 1)
+    if parts[1] == "o":
+        send_chart(chat_id, s, parts[2], days)
+    elif parts[1] == "p":
+        send_chart(chat_id, s, parts[2], days, call=call)
+    return None
+
+
+CALLBACK_PREFIXES = ("ob", "g", "c", "pa", "pf", "ch")
 
 
 @bot.callback_query_handler(func=lambda c: bool(c.data) and c.data.split(":")[0] in CALLBACK_PREFIXES)
@@ -1329,6 +1518,8 @@ def on_callback(call):
             toast = on_price_alert(call, parts, chat_id, s)
         elif kind == "pf":
             toast = on_portfolio(call, parts, chat_id, s)
+        elif kind == "ch":
+            toast = on_chart(call, parts, chat_id, s)
     except Exception:
         logger.exception("Callback %s failed (chat %s)", call.data, chat_id)
     finally:
@@ -1352,6 +1543,14 @@ def on_inline(query):
         results = social.inline_results(query.query[:40], lang, cur, BOT_USERNAME, query.from_user.id)
         bot.answer_inline_query(query.id, results, cache_time=30, is_personal=True)
         count("inline_queries")
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        # разовый обрыв связи с Telegram: пользователь просто повторит запрос, админа не дёргаем
+        logger.warning("Inline query: network error: %s", e)
+    except ApiTelegramException as e:
+        if "query is too old" in str(e).lower():  # ответили позже 10 секунд — не страшно
+            logger.warning("Inline query expired")
+        else:
+            logger.exception("Inline query failed")
     except Exception:
         logger.exception("Inline query failed")
 
@@ -1402,7 +1601,7 @@ def run_broadcast(text: str, admin_id: int) -> None:
     body = html.escape(text, quote=False)
     ok = blocked = err = 0
     last_id = 0
-    with ThreadPoolExecutor(max_workers=config.BROADCAST_WORKERS) as ex:
+    with contextlib.nullcontext(sender) as ex:  # общий пул: не закрываем его после рассылки
         while True:
             ids = db.active_ids(last_id)
             if not ids:
@@ -1436,24 +1635,34 @@ def on_broadcast_choice(call):
 # ------------------------------------------------------------------
 # Запуск
 # ------------------------------------------------------------------
+UI_READY = False  # меню команд и описание бота выставлены в Telegram
+
+
 def setup_telegram_ui() -> None:
+    global UI_READY
     try:
         for lang, names in CMD_DESC.items():
+            code = None if lang == "en" else lang
             cmds = [types.BotCommand(c, d) for c, d in zip(CMD_ORDER, names)]
-            bot.set_my_commands(cmds, language_code=None if lang == "en" else lang)
+            bot.set_my_commands(cmds, language_code=code)
+            # «Что умеет этот бот?» до нажатия Start и короткое описание в профиле бота
+            bot.set_my_description(help_texts.DESCRIPTION[lang], language_code=code)
+            bot.set_my_short_description(help_texts.SHORT_DESCRIPTION[lang], language_code=code)
         if config.WEBAPP_URL:
             bot.set_chat_menu_button(menu_button=types.MenuButtonWebApp(
                 type="web_app", text="⚙️ Settings", web_app=types.WebAppInfo(config.WEBAPP_URL)))
         else:
             logger.warning("WEBAPP_URL not set: settings button is disabled")
-    except Exception:
-        logger.exception("Failed to configure Telegram UI")
+        UI_READY = True
+    except Exception as e:
+        # например, бот стартовал раньше, чем появился интернет: повторим из heartbeat
+        logger.warning("Failed to configure Telegram UI (will retry): %s", e)
 
 
 def load_identity() -> None:
     """Имя бота (для реферальных ссылок) и включён ли inline-режим. Повторяем при сетевых сбоях."""
     global BOT_USERNAME, INLINE_OK
-    for attempt in range(5):
+    for attempt in range(3):
         try:
             me = bot.get_me()
             BOT_USERNAME, INLINE_OK = me.username, bool(me.supports_inline_queries)
@@ -1464,7 +1673,7 @@ def load_identity() -> None:
         except Exception as e:
             logger.warning("get_me failed (%s), retrying", e)
             time.sleep(3 * (attempt + 1))
-    logger.error("Could not load bot identity: invite links and sharing are disabled")
+    logger.warning("Could not load bot identity yet: will retry every minute")
 
 
 def shutdown(signum, frame) -> None:
@@ -1503,10 +1712,15 @@ def main() -> None:
         )
     finally:
         stop.set()
+        try:
+            db.wake_dispatcher()  # будим спящий диспетчер, чтобы он сразу завершился
+        except Exception:
+            pass
         for th in threads:
             th.join(timeout=20)
         alerts.notify("⏹ Бот остановлен", key="stop", cooldown=0)
         alerts.flush()
+        sender.shutdown(wait=False, cancel_futures=True)
         db.pool.close()  # иначе при выходе psycopg_pool падает в __del__ (PythonFinalizationError)
 
 

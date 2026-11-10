@@ -239,6 +239,8 @@ def fetch_json(url: str, retries: int = 4, timeout: int = 15):
         try:
             r = requests.get(url, headers=headers, timeout=timeout)
             if r.status_code == 429:
+                if attempt == retries - 1:
+                    break  # последняя попытка: не ждём впустую
                 wait = 10 * (attempt + 1)
                 logger.warning("429 from CoinGecko, sleeping %ss", wait)
                 time.sleep(wait)
@@ -263,13 +265,147 @@ def _lock_for(name: str) -> threading.Lock:
         return _mlocks.setdefault(name, threading.Lock())
 
 
-def get_markets(currency: str = "usd", max_age: float = None) -> list:
-    """Топ-100 по капитализации в нужной валюте. Кэш на CACHE_TTL сек: тысячи запросов
-    пользователей = один запрос к CoinGecko. Пока кто-то обновляет кэш, остальные
-    получают предыдущие данные; при сбое отдаётся кэш не старше STALE_MAX_SEC."""
-    max_age = config.CACHE_TTL if max_age is None else max_age
+# ------------------------------------------------------------------
+# Резервный источник курсов: CoinPaprika (+ курсы валют), если CoinGecko недоступен
+# ------------------------------------------------------------------
+STALE_PREFER_SEC = 600  # до 10 минут лучше отдать прошлые данные CoinGecko, дальше — резерв
+FALLBACK_TTL = 60  # резервные данные живут минуту: потом снова пробуем CoinGecko
+_pp_cache: dict = {"ts": 0.0, "data": None}
+_fx_cache: dict = {"ts": 0.0, "rates": {}}
+
+
+_cg_rates: dict = {"ts": 0.0, "rates": {}}
+CG_RATES_TTL = 600
+
+
+def fx_rate(currency: str) -> float:
+    """Сколько единиц валюты за 1 USD. Сначала курсы самого CoinGecko (/exchange_rates, один запрос
+    на все валюты раз в 10 минут — цены совпадают с сайтом CoinGecko), затем open.er-api.com (кэш 6 ч),
+    затем соотношение цен BTC в кэше."""
+    if currency == "usd":
+        return 1.0
+    if time.time() - _cg_rates["ts"] > CG_RATES_TTL:
+        with _lock_for("cg_rates"):
+            if time.time() - _cg_rates["ts"] > CG_RATES_TTL:
+                try:
+                    raw = fetch_json("https://api.coingecko.com/api/v3/exchange_rates", retries=1)["rates"]
+                    usd = float(raw["usd"]["value"])
+                    _cg_rates.update(ts=time.time(), rates={k: float(v["value"]) / usd for k, v in raw.items()})
+                except Exception as e:
+                    # не долбим API при сбое: следующая попытка через минуту
+                    _cg_rates["ts"] = time.time() - CG_RATES_TTL + 60
+                    logger.warning("CoinGecko exchange rates unavailable: %s", e)
+    if _cg_rates["rates"].get(currency):
+        return _cg_rates["rates"][currency]
+    if time.time() - _fx_cache["ts"] > 6 * 3600 or currency.upper() not in _fx_cache["rates"]:
+        try:
+            rates = fetch_json("https://open.er-api.com/v6/latest/USD", retries=2)["rates"]
+            _fx_cache.update(ts=time.time(), rates=rates)
+        except Exception as e:
+            logger.warning("FX rates unavailable: %s", e)
+    rate = _fx_cache["rates"].get(currency.upper())
+    if rate:
+        return float(rate)
+    usd, cur = _mcache.get("usd"), _mcache.get(currency)
+    if usd and cur:  # из последних данных CoinGecko: цена BTC в валюте / цена BTC в USD
+        b_usd = next((c["current_price"] for c in usd["data"] if c["id"] == "bitcoin"), None)
+        b_cur = next((c["current_price"] for c in cur["data"] if c["id"] == "bitcoin"), None)
+        if b_usd and b_cur:
+            return b_cur / b_usd
+    raise RuntimeError(f"no FX rate for {currency}")
+
+
+def _known_ids() -> dict:
+    """{(SYMBOL, name.lower()): coingecko_id, SYMBOL: id} — чтобы id монет у резерва совпадали
+    с CoinGecko (на них завязаны алерты, портфель, «мои монеты» и игра)."""
+    src = (_mcache.get("usd") or {}).get("data")
+    if not src:
+        try:
+            import db  # локально: market не зависит от БД, кроме этого запасного пути
+            src = json.loads(db.get_meta("top_coins") or "[]")
+        except Exception:
+            src = []
+    out = {}
+    for c in src:
+        sym = c["symbol"].upper()
+        out.setdefault((sym, (c.get("name") or "").lower()), c["id"])
+        out.setdefault(sym, c["id"])
+    return out
+
+
+def _paprika_usd() -> list:
+    if _pp_cache["data"] and time.time() - _pp_cache["ts"] < FALLBACK_TTL:
+        return _pp_cache["data"]
+    raw = fetch_json("https://api.coinpaprika.com/v1/tickers?quotes=USD", retries=2, timeout=25)
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("unexpected CoinPaprika response")
+    raw = sorted((t for t in raw if t.get("rank")), key=lambda t: t["rank"])[:250]
+    _pp_cache.update(ts=time.time(), data=raw)
+    return raw
+
+
+def fallback_markets(currency: str) -> list:
+    """Топ-200 из CoinPaprika в формате CoinGecko (id сопоставлены с CoinGecko)."""
+    raw, rate, known = _paprika_usd(), fx_rate(currency), _known_ids()
+    out, seen = [], set()
+    for t in raw:
+        q = t["quotes"]["USD"]
+        sym = t["symbol"].upper()
+        cid = known.get((sym, t["name"].lower())) or known.get(sym) or t["id"].split("-", 1)[-1]
+        if cid in seen or not q.get("price"):
+            continue
+        seen.add(cid)
+        conv = lambda v: v * rate if v is not None else None  # noqa: E731
+        out.append({
+            "id": cid, "symbol": t["symbol"].lower(), "name": t["name"], "image": None,
+            "current_price": conv(q.get("price")), "market_cap": conv(q.get("market_cap")),
+            "market_cap_rank": t["rank"], "total_volume": conv(q.get("volume_24h")),
+            "high_24h": None, "low_24h": None, "ath": conv(q.get("ath_price")),
+            "ath_change_percentage": q.get("percent_from_price_ath"),
+            "price_change_percentage_1h_in_currency": q.get("percent_change_1h"),
+            "price_change_percentage_24h_in_currency": q.get("percent_change_24h"),
+            "price_change_percentage_7d_in_currency": q.get("percent_change_7d"),
+        })
+        if len(out) >= 200:
+            break
+    if not out:
+        raise ValueError("empty fallback data")
+    return out
+
+
+_MONEY_FIELDS = ("current_price", "market_cap", "total_volume", "high_24h", "low_24h", "ath")
+
+
+def _converted(currency: str, max_age: float) -> list:
+    """Курсы в валюте = курсы в USD × курс валюты. Так к CoinGecko идёт ОДИН запрос на обновление,
+    а не по запросу на каждую валюту пользователей (меньше лимитов 429). Пересчёт кэшируется,
+    пока не обновились данные в USD. Проценты изменений — как в USD."""
+    usd = get_markets("usd", max_age)
+    base = _mcache.get("usd") or {}
     entry = _mcache.get(currency)
-    if entry and time.time() - entry["ts"] < max_age:
+    rate = fx_rate(currency)
+    if entry and entry.get("base_ts") == base.get("ts") and entry.get("rate") == rate:
+        return entry["data"]
+    data = [{**c, **{f: c[f] * rate for f in _MONEY_FIELDS if c.get(f) is not None}} for c in usd]
+    _mcache[currency] = {"ts": base.get("ts", time.time()), "data": data, "src": base.get("src", "?") + "+fx",
+                         "base_ts": base.get("ts"), "rate": rate}
+    return data
+
+
+def source(currency: str = "usd") -> str:
+    return (_mcache.get(currency) or {}).get("src", "")
+
+
+def get_markets(currency: str = "usd", max_age: float = None) -> list:
+    """Топ-200 по капитализации в нужной валюте. Кэш на CACHE_TTL сек: тысячи запросов
+    пользователей = один запрос к CoinGecko. Пока кто-то обновляет кэш, остальные
+    получают предыдущие данные. При сбое CoinGecko: кэш до 10 минут, затем резервный
+    источник (CoinPaprika), и в крайнем случае кэш не старше STALE_MAX_SEC."""
+    max_age = config.CACHE_TTL if max_age is None else max_age
+    if currency != "usd":
+        return _converted(currency, max_age)
+    entry = _mcache.get(currency)
+    if entry and time.time() - entry["ts"] < min(max_age, entry.get("ttl", max_age)):
         return entry["data"]
 
     lock = _lock_for("m:" + currency)
@@ -277,7 +413,7 @@ def get_markets(currency: str = "usd", max_age: float = None) -> list:
         return entry["data"]
     try:
         entry = _mcache.get(currency)
-        if max_age > 0 and entry and time.time() - entry["ts"] < max_age:
+        if max_age > 0 and entry and time.time() - entry["ts"] < min(max_age, entry.get("ttl", max_age)):
             return entry["data"]
         url = (
             "https://api.coingecko.com/api/v3/coins/markets"
@@ -285,15 +421,28 @@ def get_markets(currency: str = "usd", max_age: float = None) -> list:
             "&sparkline=false&price_change_percentage=1h,24h,7d"
         )
         try:
-            data = fetch_json(url)
+            data = fetch_json(url, retries=2)
             if not isinstance(data, list) or not data:
                 raise ValueError("unexpected CoinGecko response")
-        except Exception:
+        except Exception as e:
+            # свежие данные CoinGecko (пусть и чуть устаревшие) точнее резерва
+            if entry and entry.get("src") != "coinpaprika" and time.time() - entry["ts"] < STALE_PREFER_SEC:
+                logger.warning("CoinGecko failed, serving recent cache (%s)", currency)
+                return entry["data"]
+            try:
+                data = fallback_markets(currency)
+                _mcache[currency] = {"ts": time.time(), "data": data, "src": "coinpaprika", "ttl": FALLBACK_TTL}
+                logger.warning("CoinGecko failed (%s), using CoinPaprika for %s", e, currency)
+                alerts.notify("⚠️ CoinGecko недоступен — курсы идут из резервного источника (CoinPaprika).",
+                              key="cg_fallback", cooldown=3600)
+                return data
+            except Exception as fe:
+                logger.warning("Fallback source failed too: %s", fe)
             if entry and time.time() - entry["ts"] < config.STALE_MAX_SEC:
                 logger.warning("CoinGecko failed, serving stale cache (%s)", currency)
                 return entry["data"]
             raise
-        _mcache[currency] = {"ts": time.time(), "data": data}
+        _mcache[currency] = {"ts": time.time(), "data": data, "src": "coingecko"}
         return data
     finally:
         lock.release()
@@ -452,7 +601,8 @@ def get_recent_headlines(hours: int = 8, limit: int = 15) -> list:
 # ------------------------------------------------------------------
 # Gemini: ОДИН запрос = тексты сразу на всех языках (JSON); несколько ключей и моделей
 # ------------------------------------------------------------------
-_gemini_clients: dict = {}
+_gemini_http = requests.Session()  # keep-alive: повторные запросы без нового TLS-рукопожатия
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 _cooldown: dict = {}  # (индекс ключа, модель) -> время, до которого пропускаем (лимит 429)
 _rr = {"i": 0}
 
@@ -464,14 +614,33 @@ JSON_TAIL = (
 TONE = "Tone: friendly and light, a touch of humor, at most 1-2 fitting emojis."
 
 
-def _client(idx: int):
-    from google import genai
-    from google.genai import types
-
-    if idx not in _gemini_clients:
-        _gemini_clients[idx] = genai.Client(
-            api_key=config.GEMINI_KEYS[idx], http_options=types.HttpOptions(timeout=90000))
-    return _gemini_clients[idx]
+def _gemini_generate(key: str, model: str, prompt: str) -> str:
+    """Один запрос к Gemini через REST API. Раньше использовалась библиотека google-genai:
+    ради одного HTTP-запроса она добавляла ~40 МБ памяти и ~1 с к запуску.
+    Текст ошибки содержит HTTP-код и статус (429/RESOURCE_EXHAUSTED, 503/UNAVAILABLE…) —
+    по нему _call_gemini решает, что делать дальше."""
+    r = _gemini_http.post(
+        GEMINI_URL.format(model=model),
+        headers={"x-goog-api-key": key, "Content-Type": "application/json"},  # ключ не в URL и не в логах
+        json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
+              "generationConfig": {"temperature": 0.8, "responseMimeType": "application/json"}},
+        timeout=(10, 90),
+    )
+    if r.status_code != 200:
+        try:
+            err = r.json().get("error", {})
+            detail = f"{err.get('status', '')} {err.get('message', '')}"
+        except ValueError:
+            detail = r.text[:200]
+        raise RuntimeError(f"{r.status_code} {detail}")
+    data = r.json()
+    cands = data.get("candidates") or []
+    parts = (cands[0].get("content") or {}).get("parts") or [] if cands else []
+    text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+    if not text:
+        reason = cands[0].get("finishReason") if cands else (data.get("promptFeedback") or {}).get("blockReason")
+        raise ValueError(f"empty Gemini response ({reason})")
+    return text
 
 
 def _json_text(raw: str):
@@ -501,13 +670,6 @@ def _call_gemini(prompt: str, parse):
         logger.warning("No Gemini API keys configured")
         return None
 
-    from google.genai import types
-
-    gen_config = types.GenerateContentConfig(
-        temperature=0.8,
-        response_mime_type="application/json"
-    )
-
     deadline = time.time() + 240
     start = _rr["i"] % len(keys)
 
@@ -520,13 +682,7 @@ def _call_gemini(prompt: str, parse):
                 continue
 
             try:
-                resp = _client(idx).models.generate_content(
-                    model=model,
-                    contents=prompt,
-                    config=gen_config,
-                )
-
-                result = parse(resp.text or "")
+                result = parse(_gemini_generate(keys[idx], model, prompt))
                 _rr["i"] = idx + 1  # следующий запрос начнём со следующего ключа
                 return result
 
@@ -768,7 +924,7 @@ def get_ai_text(kind: str, lang: str, force: bool = False, cached_only: bool = F
 def cache_info() -> dict:
     now = time.time()
     return {
-        "markets": {k: int(now - v["ts"]) for k, v in _mcache.items()},
+        "markets": {k: f"{int(now - v['ts'])} ({v.get('src', '?')})" for k, v in _mcache.items()},
         "ai": {k: int(now - v[0]) for k, v in _ai_cache.items()},
     }
 
@@ -798,7 +954,11 @@ def get_indices(max_age: float = None) -> dict:
             dom = float(fetch_json("https://api.coingecko.com/api/v3/global",
                                    retries=2)["data"]["market_cap_percentage"]["btc"])
         except Exception as e:
-            logger.warning("BTC dominance unavailable: %s", e)
+            try:  # резерв: CoinPaprika
+                dom = float(fetch_json("https://api.coinpaprika.com/v1/global",
+                                       retries=1)["bitcoin_dominance_percentage"])
+            except Exception:
+                logger.warning("BTC dominance unavailable: %s", e)
         if fng or dom is not None:
             _idx_cache.update(ts=time.time(), data={"fng": fng, "dom": dom})
         return _idx_cache["data"]

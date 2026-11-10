@@ -8,6 +8,21 @@ from telebot import types
 import market as M
 import tools
 
+class ShareButton(types.InlineKeyboardButton):
+    """Кнопка «Поделиться» (выбор чата + inline-запрос). pyTelegramBotAPI выкидывает пустой
+    switch_inline_query при сериализации, и Telegram отклоняет всё сообщение
+    («Text buttons are not allowed»), поэтому поле пишем всегда, даже пустое."""
+
+    def __init__(self, text: str, query: str = ""):
+        super().__init__(text, switch_inline_query=query)
+        self.share_query = query
+
+    def to_dict(self):
+        d = super().to_dict()
+        d["switch_inline_query"] = self.share_query
+        return d
+
+
 REF_BONUS = 50  # баллов игры за каждого приглашённого друга
 
 # language_code Telegram -> язык бота. Для остальных показываем выбор языка.
@@ -93,7 +108,7 @@ def invite_view(lang: str, chat_id: int, username: str, n: int, inline_ok: bool)
     kb.row(types.InlineKeyboardButton(
         st["btn_send"], url=f"https://t.me/share/url?url={quote(link)}&text={quote(st['share_text'])}"))
     if inline_ok:
-        kb.row(types.InlineKeyboardButton(st["btn_inline"], switch_inline_query=""))
+        kb.row(ShareButton(st["btn_inline"]))
     return st["invite"].format(bonus=REF_BONUS, link=html.escape(link), n=n), kb
 
 

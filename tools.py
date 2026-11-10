@@ -7,6 +7,7 @@ import time
 
 from telebot import types
 
+import chart
 import db
 import market as M
 
@@ -230,6 +231,11 @@ def set_pending(chat_id: int, kind: str, coin_id: str = None) -> None:
                 _pending.pop(k, None)
 
 
+def has_pending(chat_id: int) -> bool:
+    item = _pending.get(chat_id)
+    return bool(item) and time.time() - item[2] <= PENDING_TTL
+
+
 def pop_pending(chat_id: int):
     with _pending_lock:
         item = _pending.pop(chat_id, None)
@@ -369,9 +375,11 @@ def card_markup(lang: str, coin: dict, fav: bool, share: bool):
            types.InlineKeyboardButton(tt["btn_pf"], callback_data=f"pf:ask:{cid}"))
     kb.row(types.InlineKeyboardButton(tt["btn_fav_del" if fav else "btn_fav_add"], callback_data=f"c:fav:{cid}"),
            types.InlineKeyboardButton(tt["btn_game"], callback_data=f"c:g:{cid}"))
-    last = [types.InlineKeyboardButton(tt["btn_refresh"], callback_data=f"c:r:{cid}")]
+    last = [types.InlineKeyboardButton(tt["btn_refresh"], callback_data=f"c:r:{cid}"),
+            types.InlineKeyboardButton(chart.CT[lang]["btn"], callback_data=f"ch:o:{cid}:1")]
     if share:
-        last.append(types.InlineKeyboardButton(tt["btn_share"], switch_inline_query=coin["symbol"].upper()))
+        import social  # локально: social импортирует tools
+        last.append(social.ShareButton(tt["btn_share"], coin["symbol"].upper()))
     kb.row(*last)
     return kb
 
@@ -381,8 +389,7 @@ def card(chat_id: int, s: dict, coin_id: str, share: bool):
     coin = _coin_in(s["currency"], coin_id)
     if coin is None:
         return None
-    holding = next((a for cid, _, a in db.holdings(chat_id) if cid == coin_id), None)
-    alerts_n = sum(1 for a in db.alerts_list(chat_id) if a[1] == coin_id)
+    holding, alerts_n = db.card_extras(chat_id, coin_id)
     text = card_text(coin, s["lang"], s["currency"], holding, alerts_n)
     return text, card_markup(s["lang"], coin, coin_id in s["custom_coins"], share)
 
@@ -481,7 +488,8 @@ def check_price_alerts() -> list:
                                           chg=M.fmt_pct(coin.get("price_change_percentage_24h_in_currency")))
             kb = types.InlineKeyboardMarkup()
             kb.row(types.InlineKeyboardButton(tt["btn_alert"], callback_data=f"pa:menu:{coin_id}"),
-                   types.InlineKeyboardButton("📊 " + sym, callback_data=f"c:o:{coin_id}"))
+                   types.InlineKeyboardButton("📊 " + sym, callback_data=f"c:o:{coin_id}"),
+                   types.InlineKeyboardButton(chart.CT[s["lang"]]["btn"], callback_data=f"ch:o:{coin_id}:1"))
             out.append((chat_id, f"{head}\n{body}", s["lang"], s, kb))
     return out
 

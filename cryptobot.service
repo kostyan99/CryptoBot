@@ -8,7 +8,8 @@ Type=simple
 User=kostya
 WorkingDirectory=/home/kostya/CryptoBot
 EnvironmentFile=/home/kostya/CryptoBot/.env
-Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# Большие временные буферы (картинки графиков) сразу возвращаются системе: ~150 -> ~70 МБ под нагрузкой
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MALLOC_MMAP_THRESHOLD_=131072
 ExecStart=/home/kostya/CryptoBot/venv/bin/python bot.py
 Restart=always
 RestartSec=10

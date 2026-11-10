@@ -164,13 +164,48 @@ def _public(stored: dict, subscribed: bool) -> dict:
     return s
 
 
+_DEFAULT_NEXT: dict = {"hour": None, "value": None}
+
+
+def _default_next(now: datetime) -> tuple:
+    """Расписание нового пользователя с настройками по умолчанию — считается раз в час, а не
+    на каждое сообщение (слоты всё равно начинаются с начала часа)."""
+    hour = now.replace(minute=0, second=0, microsecond=0)
+    if _DEFAULT_NEXT["hour"] != hour:
+        _DEFAULT_NEXT.update(hour=hour, value=S.compute_next(S.merged({}), hour))
+    return _DEFAULT_NEXT["value"]
+
+
 def ensure_user(chat_id: int, user=None, subscribe=None, touch: bool = True) -> State:
     """Создаёт пользователя при первом обращении (настройки по умолчанию, язык — английский).
-    subscribe=True включает рассылку (команда /start)."""
+    subscribe=True включает рассылку (команда /start).
+    Обычное сообщение или нажатие кнопки — один SQL-запрос (INSERT … ON CONFLICT … RETURNING)
+    вместо трёх: это самый частый запрос бота."""
     now = _now()
     username = getattr(user, "username", None)
     first_name = getattr(user, "first_name", None)
-    nr0, na0, nf0 = S.compute_next(S.merged({}), now)
+    nr0, na0, nf0 = _default_next(now)
+    if not subscribe:
+        with pool.connection() as conn:
+            stored, subscribed, nr, na, nf = conn.execute(
+                """
+                INSERT INTO users AS u (chat_id, settings, subscribed, next_report_at, next_analytics_at,
+                                        next_facts_at, username, first_name, requests)
+                VALUES (%(id)s, '{}'::jsonb, FALSE, %(nr)s, %(na)s, %(nf)s, %(un)s, %(fn)s, %(touch)s)
+                ON CONFLICT (chat_id) DO UPDATE SET
+                    username = COALESCE(EXCLUDED.username, u.username),
+                    first_name = COALESCE(EXCLUDED.first_name, u.first_name),
+                    blocked = FALSE,
+                    last_seen_at = now(),
+                    requests = u.requests + %(touch)s
+                RETURNING settings, subscribed, next_report_at, next_analytics_at, next_facts_at
+                """,
+                # новый пользователь не подписан: после /delete нажатие старой кнопки не должно
+                # молча возвращать рассылку (подписка — только по /start)
+                {"id": chat_id, "nr": nr0, "na": na0, "nf": nf0, "un": username, "fn": first_name,
+                 "touch": 1 if touch else 0},
+            ).fetchone()
+        return State(_public(stored, subscribed), nr, na, nf)
 
     with pool.connection() as conn:
         conn.execute(
@@ -245,6 +280,7 @@ def save_settings(chat_id: int, partial: dict) -> State:
             "WHERE chat_id = %s",
             (Jsonb(s), subscribed, nr, na, nf, chat_id),
         )
+        _wake(conn)  # расписание могло сдвинуться раньше, чем диспетчер собирался проснуться
     s["enabled"] = subscribed
     return State(s, nr, na, nf)
 
@@ -252,6 +288,39 @@ def save_settings(chat_id: int, partial: dict) -> State:
 def set_subscribed(chat_id: int, value: bool) -> None:
     if get_state(chat_id) is not None:
         save_settings(chat_id, {"enabled": value})
+
+
+WAKE_CHANNEL = "cryptobot_wake"
+
+
+def _wake(conn) -> None:
+    """Будит диспетчер рассылки (он спит до ближайшего слота). Сигнал уходит при COMMIT."""
+    conn.execute(f"NOTIFY {WAKE_CHANNEL}")
+
+
+def wake_dispatcher() -> None:
+    with pool.connection() as conn:
+        _wake(conn)
+
+
+def next_due():
+    """Ближайший момент, когда кому-то пора что-то отправить (по частичным индексам — быстро)."""
+    with pool.connection() as conn:
+        return conn.execute(
+            "SELECT LEAST((SELECT min(next_report_at) FROM users WHERE subscribed AND NOT blocked), "
+            "(SELECT min(next_analytics_at) FROM users WHERE subscribed AND NOT blocked "
+            "AND next_analytics_at IS NOT NULL), "
+            "(SELECT min(next_facts_at) FROM users WHERE subscribed AND NOT blocked "
+            "AND next_facts_at IS NOT NULL))").fetchone()[0]
+
+
+def card_extras(chat_id: int, coin_id: str) -> tuple:
+    """(сколько монеты в портфеле или None, сколько активных алертов) — одним запросом."""
+    with pool.connection() as conn:
+        return conn.execute(
+            "SELECT (SELECT amount FROM holdings WHERE chat_id = %(c)s AND coin_id = %(m)s), "
+            "(SELECT count(*) FROM price_alerts WHERE chat_id = %(c)s AND coin_id = %(m)s "
+            "AND triggered_at IS NULL)", {"c": chat_id, "m": coin_id}).fetchone()
 
 
 def request_send_now(chat_id: int) -> bool:
@@ -262,6 +331,8 @@ def request_send_now(chat_id: int) -> bool:
             "WHERE chat_id = %s AND subscribed AND NOT blocked",
             (chat_id,),
         )
+        if cur.rowcount > 0:
+            _wake(conn)
         return cur.rowcount > 0
 
 
@@ -864,7 +935,9 @@ def alerts_trigger(currency: str, prices: dict) -> list:
     [(chat_id, coin_id, symbol, target, direction, settings, subscribed_ok)]."""
     if not prices:
         return []
-    ids, vals = list(prices), [prices[k] for k in prices]
+    # CoinGecko отдаёт часть цен целыми числами (например, 1 у стейблкоинов): psycopg не умеет
+    # передавать массив смешанных типов, поэтому приводим всё к float
+    ids, vals = list(prices), [float(prices[k]) for k in prices]
     with pool.connection() as conn:
         rows = conn.execute(
             """
