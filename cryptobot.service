@@ -6,10 +6,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=kostya
-WorkingDirectory=/home/orangepi/cryptobot
-EnvironmentFile=/home/orangepi/cryptobot/.env
+WorkingDirectory=/home/kostya/CryptoBot
+EnvironmentFile=/home/kostya/CryptoBot/.env
 Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-ExecStart=/home/orangepi/cryptobot/venv/bin/python bot.py
+ExecStart=/home/kostya/CryptoBot/venv/bin/python bot.py
 Restart=always
 RestartSec=10
 TimeoutStopSec=45

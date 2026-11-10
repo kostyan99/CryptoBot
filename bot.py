@@ -21,6 +21,8 @@ import db
 import game
 import market as M
 import settings as S
+import social
+import tools
 
 config.setup_logging("bot")
 logger = logging.getLogger("bot")
@@ -32,6 +34,8 @@ started_at = time.time()
 counters = collections.Counter()
 counters_lock = threading.Lock()
 pending_broadcast: dict = {}
+BOT_USERNAME = None  # заполняется при старте (get_me): нужен для реферальных ссылок
+INLINE_OK = False  # включён ли inline-режим в @BotFather (/setinline)
 
 
 def count(name: str, n: int = 1) -> None:
@@ -120,16 +124,6 @@ T = {
     },
 }
 
-# описания команд в меню Telegram: top, settings, stop, start, help
-COMMANDS = {
-    "en": ["Prices now", "Settings", "Stop reports", "Start reports", "Help"],
-    "ru": ["Курс сейчас", "Настройки", "Отключить рассылку", "Включить рассылку", "Помощь"],
-    "fr": ["Cours maintenant", "Paramètres", "Arrêter les envois", "Activer les envois", "Aide"],
-    "es": ["Precios ahora", "Ajustes", "Detener envíos", "Activar envíos", "Ayuda"],
-    "de": ["Kurse jetzt", "Einstellungen", "Versand stoppen", "Versand aktivieren", "Hilfe"],
-}
-
-
 T_EXTRA = {
     "en": {"btn_game": "🎮 Game",
            "ob_prof": "✨ <b>Pick your style</b> — I'll set everything up in one tap. You can fine-tune it later in ⚙️ Settings.\n\n{list}",
@@ -170,6 +164,125 @@ T_EXTRA = {
 for _l in T:
     T[_l].update(T_EXTRA[_l])
 
+T_V2 = {
+    "en": {
+        "start": "👋 <b>Hi!</b> I'm your crypto assistant: prices, AI analytics, price alerts, portfolio and a prediction game.\n\n"
+                 "{summary}\n\n🔎 Send any ticker — <b>BTC</b>, <b>ETH</b> — for a coin card. /help — everything I can do.",
+        "help": "📖 <b>What I can do</b>\n\n"
+                "🔎 Send any ticker — <b>BTC</b>, <b>eth</b>, <b>solana</b> — for a coin card\n\n"
+                "/top — prices now\n/price BTC — coin card\n"
+                "/alerts — price alerts · <code>/alert BTC 100000</code>\n"
+                "/portfolio — your portfolio · <code>/add BTC 0.5</code>\n"
+                "/game — Up or Down? · /leaderboard — top players\n"
+                "/invite — invite friends (+50 game points each)\n"
+                "/settings — schedule, coins, language · /profile — presets\n"
+                "/stop — pause reports · /start — resume\n/delete — delete my data",
+        "btn_pf": "💼 Portfolio", "btn_alerts": "🔔 Alerts", "btn_invite": "🎁 Invite", "btn_share": "📤 Share",
+        "ob_lang_btn": "🌍 Language",
+        "tips": "💡 <b>Quick tips</b>\n• Send any ticker — <b>BTC</b>, <b>ETH</b>… — to get a coin card\n"
+                "• 🔔 /alerts — “tell me when BTC hits 100k”\n• 💼 /portfolio — track what you hold\n"
+                "• 🎯 /game — predict prices and keep a daily streak 🔥\n• 🎁 /invite — bring friends, earn points",
+        "flood": "⏳ Too many requests — please slow down a little.",
+    },
+    "ru": {
+        "start": "👋 <b>Привет!</b> Я ваш крипто-помощник: курсы, AI-аналитика, ценовые алерты, портфель и игра-прогноз.\n\n"
+                 "{summary}\n\n🔎 Отправьте любой тикер — <b>BTC</b>, <b>ETH</b> — и получите карточку монеты. /help — всё, что я умею.",
+        "help": "📖 <b>Что я умею</b>\n\n"
+                "🔎 Отправьте любой тикер — <b>BTC</b>, <b>eth</b>, <b>биткоин</b> — и получите карточку монеты\n\n"
+                "/top — курс сейчас\n/price BTC — карточка монеты\n"
+                "/alerts — ценовые алерты · <code>/alert BTC 100000</code>\n"
+                "/portfolio — ваш портфель · <code>/add BTC 0.5</code>\n"
+                "/game — «Вверх или вниз?» · /leaderboard — рейтинг\n"
+                "/invite — пригласить друзей (+50 баллов за каждого)\n"
+                "/settings — расписание, монеты, язык · /profile — профили\n"
+                "/stop — пауза рассылки · /start — включить\n/delete — удалить мои данные",
+        "btn_pf": "💼 Портфель", "btn_alerts": "🔔 Алерты", "btn_invite": "🎁 Пригласить", "btn_share": "📤 Поделиться",
+        "ob_lang_btn": "🌍 Язык",
+        "tips": "💡 <b>Пара подсказок</b>\n• Отправьте любой тикер — <b>BTC</b>, <b>ETH</b>… — и получите карточку монеты\n"
+                "• 🔔 /alerts — «напиши, когда BTC будет 100k»\n• 💼 /portfolio — следите за своими монетами\n"
+                "• 🎯 /game — прогнозируйте цену и держите серию дней 🔥\n• 🎁 /invite — зовите друзей и получайте баллы",
+        "flood": "⏳ Слишком много запросов — чуть помедленнее, пожалуйста.",
+    },
+    "fr": {
+        "start": "👋 <b>Salut !</b> Je suis votre assistant crypto : cours, analyses IA, alertes de prix, portefeuille et jeu de pronostics.\n\n"
+                 "{summary}\n\n🔎 Envoyez un ticker — <b>BTC</b>, <b>ETH</b> — pour sa fiche. /help — tout ce que je sais faire.",
+        "help": "📖 <b>Ce que je sais faire</b>\n\n"
+                "🔎 Envoyez un ticker — <b>BTC</b>, <b>eth</b>, <b>solana</b> — pour la fiche de la crypto\n\n"
+                "/top — cours maintenant\n/price BTC — fiche d’une crypto\n"
+                "/alerts — alertes de prix · <code>/alert BTC 100000</code>\n"
+                "/portfolio — votre portefeuille · <code>/add BTC 0.5</code>\n"
+                "/game — hausse ou baisse ? · /leaderboard — classement\n"
+                "/invite — inviter des amis (+50 points chacun)\n"
+                "/settings — planning, cryptos, langue · /profile — profils\n"
+                "/stop — mettre en pause · /start — reprendre\n/delete — supprimer mes données",
+        "btn_pf": "💼 Portefeuille", "btn_alerts": "🔔 Alertes", "btn_invite": "🎁 Inviter", "btn_share": "📤 Partager",
+        "ob_lang_btn": "🌍 Langue",
+        "tips": "💡 <b>Astuces</b>\n• Envoyez un ticker — <b>BTC</b>, <b>ETH</b>… — pour la fiche de la crypto\n"
+                "• 🔔 /alerts — « préviens-moi quand BTC atteint 100k »\n• 💼 /portfolio — suivez vos avoirs\n"
+                "• 🎯 /game — pronostiquez et gardez votre série quotidienne 🔥\n• 🎁 /invite — invitez des amis, gagnez des points",
+        "flood": "⏳ Trop de requêtes — ralentissez un peu, s’il vous plaît.",
+    },
+    "es": {
+        "start": "👋 <b>¡Hola!</b> Soy tu asistente cripto: precios, análisis con IA, alertas de precio, cartera y un juego de predicciones.\n\n"
+                 "{summary}\n\n🔎 Envía cualquier ticker — <b>BTC</b>, <b>ETH</b> — para ver su ficha. /help — todo lo que sé hacer.",
+        "help": "📖 <b>Qué sé hacer</b>\n\n"
+                "🔎 Envía cualquier ticker — <b>BTC</b>, <b>eth</b>, <b>solana</b> — para ver la ficha de la moneda\n\n"
+                "/top — precios ahora\n/price BTC — ficha de moneda\n"
+                "/alerts — alertas de precio · <code>/alert BTC 100000</code>\n"
+                "/portfolio — tu cartera · <code>/add BTC 0.5</code>\n"
+                "/game — ¿sube o baja? · /leaderboard — clasificación\n"
+                "/invite — invitar amigos (+50 puntos por cada uno)\n"
+                "/settings — horario, monedas, idioma · /profile — perfiles\n"
+                "/stop — pausar envíos · /start — reanudar\n/delete — borrar mis datos",
+        "btn_pf": "💼 Cartera", "btn_alerts": "🔔 Alertas", "btn_invite": "🎁 Invitar", "btn_share": "📤 Compartir",
+        "ob_lang_btn": "🌍 Idioma",
+        "tips": "💡 <b>Consejos</b>\n• Envía cualquier ticker — <b>BTC</b>, <b>ETH</b>… — para ver su ficha\n"
+                "• 🔔 /alerts — «avísame cuando BTC llegue a 100k»\n• 💼 /portfolio — sigue lo que tienes\n"
+                "• 🎯 /game — predice precios y mantén tu racha diaria 🔥\n• 🎁 /invite — invita amigos y gana puntos",
+        "flood": "⏳ Demasiadas solicitudes — ve un poco más despacio, por favor.",
+    },
+    "de": {
+        "start": "👋 <b>Hallo!</b> Ich bin Ihr Krypto-Assistent: Kurse, KI-Analysen, Preisalarme, Portfolio und ein Tippspiel.\n\n"
+                 "{summary}\n\n🔎 Senden Sie einen Ticker — <b>BTC</b>, <b>ETH</b> — für die Coin-Karte. /help — alle Funktionen.",
+        "help": "📖 <b>Was ich kann</b>\n\n"
+                "🔎 Senden Sie einen Ticker — <b>BTC</b>, <b>eth</b>, <b>solana</b> — für die Coin-Karte\n\n"
+                "/top — Kurse jetzt\n/price BTC — Coin-Karte\n"
+                "/alerts — Preisalarme · <code>/alert BTC 100000</code>\n"
+                "/portfolio — Ihr Portfolio · <code>/add BTC 0.5</code>\n"
+                "/game — Hoch oder runter? · /leaderboard — Rangliste\n"
+                "/invite — Freunde einladen (+50 Punkte pro Freund)\n"
+                "/settings — Zeitplan, Coins, Sprache · /profile — Profile\n"
+                "/stop — Versand pausieren · /start — fortsetzen\n/delete — meine Daten löschen",
+        "btn_pf": "💼 Portfolio", "btn_alerts": "🔔 Alarme", "btn_invite": "🎁 Einladen", "btn_share": "📤 Teilen",
+        "ob_lang_btn": "🌍 Sprache",
+        "tips": "💡 <b>Kurze Tipps</b>\n• Senden Sie einen Ticker — <b>BTC</b>, <b>ETH</b>… — für die Coin-Karte\n"
+                "• 🔔 /alerts — „Sag Bescheid, wenn BTC 100k erreicht“\n• 💼 /portfolio — Bestände verfolgen\n"
+                "• 🎯 /game — Kurse tippen und die Tagesserie halten 🔥\n• 🎁 /invite — Freunde einladen, Punkte sammeln",
+        "flood": "⏳ Zu viele Anfragen — bitte etwas langsamer.",
+    },
+}
+for _l in T:
+    T[_l].update(T_V2[_l])
+
+# меню команд Telegram (порядок важен: самые нужные сверху)
+CMD_ORDER = ["top", "price", "alerts", "portfolio", "game", "leaderboard", "invite", "settings",
+             "profile", "stop", "start", "help"]
+CMD_DESC = {
+    "en": ["Prices now", "Coin card (e.g. /price BTC)", "Price alerts", "My portfolio", "Play Up or Down",
+           "Leaderboard", "Invite friends", "Settings", "Choose a profile", "Stop reports", "Start reports", "Help"],
+    "ru": ["Курс сейчас", "Карточка монеты (/price BTC)", "Ценовые алерты", "Мой портфель", "Игра «Вверх или вниз»",
+           "Рейтинг игроков", "Пригласить друзей", "Настройки", "Выбрать профиль", "Отключить рассылку",
+           "Включить рассылку", "Помощь"],
+    "fr": ["Cours maintenant", "Fiche d’une crypto (/price BTC)", "Alertes de prix", "Mon portefeuille",
+           "Jouer : hausse ou baisse", "Classement", "Inviter des amis", "Paramètres", "Choisir un profil",
+           "Arrêter les envois", "Activer les envois", "Aide"],
+    "es": ["Precios ahora", "Ficha de moneda (/price BTC)", "Alertas de precio", "Mi cartera", "Jugar: ¿sube o baja?",
+           "Clasificación", "Invitar amigos", "Ajustes", "Elegir un perfil", "Detener envíos", "Activar envíos", "Ayuda"],
+    "de": ["Kurse jetzt", "Coin-Karte (/price BTC)", "Preisalarme", "Mein Portfolio", "Spiel: Hoch oder runter",
+           "Rangliste", "Freunde einladen", "Einstellungen", "Profil wählen", "Versand stoppen",
+           "Versand aktivieren", "Hilfe"],
+}
+
 # стартовые профили: (название, описание)
 PROF = {
     "en": {"beginner": ("🌱 Beginner", "Top 10 every 4 h, analytics twice a day, a fact every 3 h, only big-move alerts, quiet at night"),
@@ -194,13 +307,6 @@ PROF = {
            "explorer": ("🔎 Entdecker", "Top 5 alle 8 Std., Analyse zweimal täglich, jede Stunde ein neuer Fakt, keine Alarme")},
 }
 
-COMMANDS_EXTRA = {
-    "en": ["Play Up or Down", "Leaderboard", "Choose a profile"],
-    "ru": ["Игра «Вверх или вниз»", "Рейтинг игроков", "Выбрать профиль"],
-    "fr": ["Jouer : hausse ou baisse", "Classement", "Choisir un profil"],
-    "es": ["Jugar: ¿sube o baja?", "Clasificación", "Elegir un perfil"],
-    "de": ["Spiel: Hoch oder runter", "Rangliste", "Profil wählen"],
-}
 LANG_BUTTONS = [("en", "🇬🇧 English"), ("ru", "🇷🇺 Русский"), ("fr", "🇫🇷 Français"),
                 ("es", "🇪🇸 Español"), ("de", "🇩🇪 Deutsch")]
 
@@ -224,8 +330,8 @@ def summary(s: dict) -> str:
 # ------------------------------------------------------------------
 # Клавиатуры
 # ------------------------------------------------------------------
-def settings_markup(lang: str):
-    """Кнопки под сообщениями: настройки (мини-приложение) и игра."""
+def settings_markup(lang: str, share: bool = False):
+    """Кнопки под сообщениями: настройки (мини-приложение) и игра; share — ещё «Поделиться»."""
     kb = types.InlineKeyboardMarkup()
     row = []
     if config.WEBAPP_URL:
@@ -233,13 +339,16 @@ def settings_markup(lang: str):
             T[lang]["btn_settings"], web_app=types.WebAppInfo(config.WEBAPP_URL)))
     row.append(types.InlineKeyboardButton(T[lang]["btn_game"], callback_data="g:new"))
     kb.row(*row)
+    if share and INLINE_OK:
+        kb.row(types.InlineKeyboardButton(T[lang]["btn_share"], switch_inline_query=""))
     return kb
 
 
 def main_keyboard(lang: str):
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.row(T[lang]["btn_top"], T[lang]["btn_settings"])
-    kb.row(T[lang]["btn_game"])
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True)
+    kb.row(T[lang]["btn_top"], T[lang]["btn_pf"])
+    kb.row(T[lang]["btn_alerts"], T[lang]["btn_game"])
+    kb.row(T[lang]["btn_settings"], T[lang]["btn_invite"])
     return kb
 
 
@@ -256,13 +365,15 @@ def profile_text(lang: str) -> str:
     return T[lang]["ob_prof"].format(list="\n\n".join(lines))
 
 
-def profile_markup(lang: str):
+def profile_markup(lang: str, lang_btn: bool = False):
     kb = types.InlineKeyboardMarkup()
     names = list(S.PROFILES)
     for i in range(0, len(names), 2):
         kb.row(*[types.InlineKeyboardButton(PROF[lang][n][0], callback_data=f"ob:prof:{n}")
                  for n in names[i:i + 2]])
     kb.row(types.InlineKeyboardButton(T[lang]["ob_custom_btn"], callback_data="ob:prof:custom"))
+    if lang_btn:  # язык определили автоматически — даём сменить
+        kb.row(types.InlineKeyboardButton(T[lang]["ob_lang_btn"], callback_data="ob:langs"))
     return kb
 
 
@@ -276,9 +387,10 @@ def tz_markup(lang: str):
 
 
 def utc_offset(tz_name: str) -> str:
-    off = datetime.now(ZoneInfo(tz_name)).utcoffset().total_seconds()
-    h, m = int(off // 3600), int(abs(off) % 3600 // 60)
-    return f"{h:+d}" + (f":{m:02d}" if m else "")
+    off = int(datetime.now(ZoneInfo(tz_name)).utcoffset().total_seconds())
+    sign, off = ("-" if off < 0 else "+"), abs(off)  # -3:30, а не -4:30 (Newfoundland и т.п.)
+    h, m = off // 3600, off % 3600 // 60
+    return f"{sign}{h}" + (f":{m:02d}" if m else "")
 
 
 # ------------------------------------------------------------------
@@ -333,8 +445,10 @@ def send(chat_id, text: str, throttle: bool = False, markup=None, silent: bool =
 
 
 def deliver(item: tuple) -> str:
+    """item: (chat_id, text, lang, silent[, fact_id[, markup]])"""
     chat_id, text, lang, silent = item[:4]
-    result = send(chat_id, text, throttle=True, markup=settings_markup(lang), silent=silent)
+    markup = item[5] if len(item) > 5 and item[5] is not None else settings_markup(lang)
+    result = send(chat_id, text, throttle=True, markup=markup, silent=silent)
     if result == "blocked":
         try:
             db.mark_blocked(chat_id)
@@ -384,6 +498,15 @@ def dispatcher_loop() -> None:
             except Exception:
                 logger.exception("pick_facts failed")
 
+        # портфель (короткая строка в отчёте) — одним запросом на пачку
+        holdings = {}
+        pf_chats = [j.chat_id for j in jobs if j.want_report and j.settings["show_portfolio"]]
+        if pf_chats:
+            try:
+                holdings = db.holdings_for(pf_chats)
+            except Exception:
+                logger.exception("holdings_for failed")
+
         items = []
         for job in jobs:
             s = job.settings
@@ -392,8 +515,10 @@ def dispatcher_loop() -> None:
                 count("skipped_no_data")
             try:
                 fact = picked.get(job.chat_id) if job.want_facts else None
+                pf = tools.portfolio_line(s, holdings.get(job.chat_id)) if want_r else None
                 text = M.compose(s, want_r, job.want_analytics, job.want_facts,
-                                 fact_text=M.format_fact(fact[1], s["lang"]) if fact else None)
+                                 fact_text=M.format_fact(fact[1], s["lang"]) if fact else None,
+                                 portfolio_text=pf)
             except Exception:
                 logger.exception("compose failed for %s", job.chat_id)
                 continue
@@ -554,14 +679,17 @@ def weekly_loop() -> None:
                     except Exception as e:
                         logger.error("Weekly: market data unavailable (%s): %s", cur, e)
                 items = []
+                holdings = db.holdings_for([c for c, _ in jobs])
                 for chat_id, s in jobs:
                     try:
-                        text = M.compose_weekly(s, game.weekly_line(chat_id, s["lang"]))
+                        pf = tools.portfolio_line(s, holdings.get(chat_id), weekly=True)
+                        text = M.compose_weekly(s, game.weekly_line(chat_id, s["lang"]), portfolio_text=pf)
                     except Exception:
                         logger.exception("weekly compose failed for %s", chat_id)
                         continue
                     if text:
-                        items.append((chat_id, text, s["lang"], False))
+                        items.append((chat_id, text, s["lang"], False, None,
+                                      settings_markup(s["lang"], share=True)))
                 if items:
                     with ThreadPoolExecutor(max_workers=config.BROADCAST_WORKERS) as ex:
                         list(ex.map(deliver, items))
@@ -571,15 +699,64 @@ def weekly_loop() -> None:
         stop.wait(60)
 
 
-def game_loop() -> None:
-    """Закрывает созревшие прогнозы игры и отправляет результаты."""
-    stop.wait(30)
+REMIND_HOUR = 20  # локальный час напоминания «не потеряйте серию»
+
+
+def send_streak_reminders() -> None:
+    """Раз в день (в 20:00 по времени игрока) напоминает о серии, если сегодня он ещё не играл."""
+    now = datetime.now(timezone.utc)
+    for chat_id, streak, last_play, reminded_on, s in db.game_streak_candidates():
+        if not s["game_reminders"]:
+            continue
+        local = now.astimezone(ZoneInfo(s["tz"]))
+        today = local.date()
+        if (local.hour != REMIND_HOUR or last_play != today - timedelta(days=1)
+                or reminded_on == today or not S.is_allowed_now(s, now)):
+            continue
+        db.game_mark_reminded(chat_id, today)  # до отправки: не дублируем при сбоях
+        text, kb = game.reminder(s["lang"], streak)
+        res = send(chat_id, text, throttle=True, markup=kb)
+        if res == "blocked":
+            db.mark_blocked(chat_id)
+        count("streak_reminders")
+
+
+def price_alerts_loop() -> None:
+    """Раз в минуту проверяет ценовые алерты («сообщи, когда BTC будет $100k»)."""
+    stop.wait(20)
     while not stop.is_set():
+        try:
+            now = datetime.now(timezone.utc)
+            items = [(chat_id, text, lang, not S.is_allowed_now(s, now), None, kb)
+                     for chat_id, text, lang, s, kb in tools.check_price_alerts()]
+            if items:
+                with ThreadPoolExecutor(max_workers=config.BROADCAST_WORKERS) as ex:
+                    results = list(ex.map(deliver, items))
+                count("price_alerts_sent", sum(1 for r in results if r == "ok"))
+        except Exception:
+            logger.exception("Price alerts check failed")
+        stop.wait(60)
+
+
+def game_loop() -> None:
+    """Закрывает созревшие прогнозы игры и отправляет результаты; напоминает о серии дней."""
+    stop.wait(30)
+    last_remind = 0.0
+    while not stop.is_set():
+        if time.time() - last_remind > 300:
+            last_remind = time.time()
+            try:
+                send_streak_reminders()
+            except Exception:
+                logger.exception("Streak reminders failed")
         try:
             if db.game_due_count():
                 prices = {c["id"]: c.get("current_price") for c in M.get_markets("usd")}
                 for r in db.game_resolve_due(prices.get, game.score):
-                    send(r["chat_id"], game.result_text(r), throttle=True, markup=game.after_markup(r["lang"]))
+                    res = send(r["chat_id"], game.result_text(r), throttle=True,
+                               markup=game.after_markup(r["lang"]))
+                    if res == "blocked":
+                        db.mark_blocked(r["chat_id"])
                     count("game_results")
         except Exception as e:
             logger.warning("Game loop error: %s", e)
@@ -604,18 +781,24 @@ def heartbeat_loop() -> None:
 
 def stats_text() -> str:
     st = db.get_stats()
+    facts_total, facts_unused = db.facts_stats()
     with counters_lock:
         c = dict(counters)
     return (
-        f"👥 Всего: {st['total']}\n✅ Активных: {st['active']}\n"
+        f"👥 Всего: {st['total']}\n✅ Подписаны на рассылку: {st['active']}\n"
+        f"📅 DAU: {st['dau']} · WAU: {st['wau']}\n"
+        f"🆕 Новых за сутки: {st['new_1d']} · за 7 дней: {st['new_7d']} (по приглашениям: {st['ref_7d']})\n"
+        f"🔔 Ценовых алертов: {st['price_alerts']} · 💼 Портфелей: {st['portfolios']} · "
+        f"🎯 Играли за 2 дня: {st['players_2d']}\n"
         f"🚫 Заблокировали бота: {st['blocked']}\n🧠 С аналитикой: {st['analytics']}\n"
-        f"💡 С фактами: {st['facts']} (в пуле фактов: {db.facts_stats()[0]}, непоказанных: {db.facts_stats()[1]})\n"
+        f"💡 С фактами: {st['facts']} (в пуле фактов: {facts_total}, непоказанных: {facts_unused})\n"
         f"🌐 Языки: {st['langs'] or '—'}\n\n"
         f"📤 С момента запуска: отправлено {c.get('sent_ok', 0)}, "
         f"заблокировано {c.get('sent_blocked', 0)}, ошибок {c.get('sent_error', 0)}, "
         f"пропусков (нет данных) {c.get('skipped_no_data', 0)}, "
         f"алертов о движениях {c.get('alerts_sent', 0)}, итогов недели {c.get('weekly_sent', 0)}, "
-        f"результатов игры {c.get('game_results', 0)}"
+        f"результатов игры {c.get('game_results', 0)}, ценовых алертов {c.get('price_alerts_sent', 0)}, "
+        f"напоминаний о серии {c.get('streak_reminders', 0)}, новых пользователей {c.get('new_users', 0)}"
     )
 
 
@@ -628,52 +811,130 @@ def send_digest() -> None:
 # ------------------------------------------------------------------
 # Команды пользователя
 # ------------------------------------------------------------------
-def prices_text(s: dict) -> str:
-    """Курс + (если включена) закэшированная аналитика — без ожидания Gemini."""
-    return M.compose(s, True, s["analytics_enabled"], False, ai_cached_only=True)
+def prices_text(s: dict, chat_id: int = None) -> str:
+    """Курс + (если включена) закэшированная аналитика — без ожидания Gemini; плюс строка портфеля."""
+    pf = tools.portfolio_line(s, db.holdings(chat_id)) if chat_id else None
+    return M.compose(s, True, s["analytics_enabled"], False, ai_cached_only=True, portfolio_text=pf)
+
+
+# --- защита от флуда: не больше 20 действий за 10 секунд на пользователя ---
+_flood: dict = collections.defaultdict(collections.deque)
+_flood_lock = threading.Lock()
+FLOOD_LIMIT, FLOOD_WINDOW = 20, 10
+
+
+def flooded(chat_id: int) -> bool:
+    if is_admin(chat_id):
+        return False
+    now = time.monotonic()
+    with _flood_lock:
+        q = _flood[chat_id]
+        while q and now - q[0] > FLOOD_WINDOW:
+            q.popleft()
+        q.append(now)
+        if len(_flood) > 20000:
+            for k in [k for k, v in _flood.items() if not v or now - v[-1] > FLOOD_WINDOW]:
+                _flood.pop(k, None)
+        return len(q) > FLOOD_LIMIT
+
+
+def user(message, touch: bool = True) -> dict:
+    return db.ensure_user(message.chat.id, message.from_user, touch=touch).settings
+
+
+def local_today(s: dict):
+    return datetime.now(ZoneInfo(s["tz"])).date()
+
+
+def ask(chat_id: int, text: str, placeholder: str = None) -> None:
+    """Вопрос с полем ответа (ForceReply): пользователю достаточно просто ввести значение."""
+    send(chat_id, text, markup=types.ForceReply(input_field_placeholder=placeholder))
+
+
+def show_card(chat_id: int, s: dict, coin_id: str, call=None) -> bool:
+    res = tools.card(chat_id, s, coin_id, share=INLINE_OK)
+    if res is None:
+        return False
+    text, kb = res
+    if call is not None:
+        edit(call, text, kb)
+    else:
+        send(chat_id, text, markup=kb)
+    count("coin_cards")
+    return True
+
+
+def reward_referrer(referrer: int, new_user) -> None:
+    try:
+        db.game_add_points(referrer, social.REF_BONUS)
+        st = db.get_state(referrer)
+        if st is not None:
+            send(referrer, social.joined_text(st.settings["lang"], getattr(new_user, "first_name", None)))
+        count("referrals")
+    except Exception:
+        logger.exception("referral reward failed for %s", referrer)
 
 
 def handle_start(message) -> None:
-    is_new = not db.user_exists(message.chat.id)
-    state = db.ensure_user(message.chat.id, message.from_user, subscribe=True)
-    if is_new:  # онбординг: язык -> профиль -> часовой пояс
-        send(message.chat.id, "🌍 <b>Choose your language · Выберите язык</b>", markup=lang_picker_markup())
-        return
+    chat_id = message.chat.id
+    payload = (message.text or "").partition(" ")[2].strip()
+    ref, coin_id = social.parse_payload(payload) if payload else (None, None)
+    is_new = not db.user_exists(chat_id)
+    # переход по ссылке на монету не должен молча включать рассылку тому, кто её выключил
+    state = db.ensure_user(chat_id, message.from_user, subscribe=is_new or not coin_id)
     s = state.settings
+    if is_new:  # онбординг: язык (автоматически, если можем) -> профиль -> часовой пояс
+        count("new_users")
+        if ref and db.set_referrer(chat_id, ref):
+            reward_referrer(ref, message.from_user)
+        lang = social.detect_lang(getattr(message.from_user, "language_code", None))
+        if lang:
+            s = db.save_settings(chat_id, {"lang": lang}).settings
+        if coin_id:
+            show_card(chat_id, s, coin_id)
+        if lang:
+            send(chat_id, profile_text(lang), markup=profile_markup(lang, lang_btn=True))
+        else:
+            send(chat_id, "🌍 <b>Choose your language · Выберите язык</b>", markup=lang_picker_markup())
+        return
+    if coin_id and show_card(chat_id, s, coin_id):
+        return
     t = T[s["lang"]]
-    head = t["start"].format(summary=summary(s))
-    send(message.chat.id, head, markup=main_keyboard(s["lang"]))
+    send(chat_id, t["start"].format(summary=summary(s)), markup=main_keyboard(s["lang"]))
     try:
-        send(message.chat.id, prices_text(s), markup=settings_markup(s["lang"]))
+        send(chat_id, prices_text(s, chat_id), markup=settings_markup(s["lang"], share=True))
     except Exception:
-        logger.exception("start: prices failed for %s", message.chat.id)
-        send(message.chat.id, t["err"])
+        logger.exception("start: prices failed for %s", chat_id)
+        send(chat_id, t["err"])
 
 
 def handle_top(message) -> None:
-    s = db.ensure_user(message.chat.id, message.from_user).settings
+    s = user(message)
     try:
-        text = prices_text(s) or T[s["lang"]]["err"]
+        text = prices_text(s, message.chat.id) or T[s["lang"]]["err"]
     except Exception:
         logger.exception("top: prices failed for %s", message.chat.id)
         text = T[s["lang"]]["err"]
-    send(message.chat.id, text, markup=settings_markup(s["lang"]))
+    send(message.chat.id, text, markup=settings_markup(s["lang"], share=True))
 
 
 def handle_settings(message) -> None:
-    s = db.ensure_user(message.chat.id, message.from_user).settings
+    s = user(message)
     t = T[s["lang"]]
-    markup = settings_markup(s["lang"])
-    send(message.chat.id, t["settings"] if markup else t["no_webapp"], markup=markup)
+    # settings_markup всегда содержит кнопку игры, поэтому проверяем сам WEBAPP_URL
+    if config.WEBAPP_URL:
+        send(message.chat.id, t["settings"], markup=settings_markup(s["lang"]))
+    else:
+        send(message.chat.id, t["no_webapp"])
 
 
 def handle_profile(message) -> None:
-    s = db.ensure_user(message.chat.id, message.from_user, touch=False).settings
+    s = user(message, touch=False)
     send(message.chat.id, profile_text(s["lang"]), markup=profile_markup(s["lang"]))
 
 
 def handle_game(message) -> None:
-    s = db.ensure_user(message.chat.id, message.from_user, touch=False).settings
+    s = user(message, touch=False)
     try:
         text, kb = game.new_card(s["lang"])
     except Exception:
@@ -684,31 +945,174 @@ def handle_game(message) -> None:
 
 
 def handle_leaderboard(message) -> None:
-    s = db.ensure_user(message.chat.id, message.from_user, touch=False).settings
+    s = user(message, touch=False)
     text, kb = game.leaderboard(s["lang"], message.chat.id, "week")
     send(message.chat.id, text, markup=kb)
 
 
 def handle_stop(message) -> None:
-    s = db.ensure_user(message.chat.id, message.from_user, touch=False).settings
+    s = user(message, touch=False)
     db.set_subscribed(message.chat.id, False)
     send(message.chat.id, T[s["lang"]]["stop"], markup=settings_markup(s["lang"]))
 
 
 def handle_delete(message) -> None:
-    s = db.ensure_user(message.chat.id, message.from_user, touch=False).settings
+    s = user(message, touch=False)
     t = T[s["lang"]]
     if (message.text or "").strip().lower().endswith("confirm"):
         db.delete_user(message.chat.id)
+        tools.pop_pending(message.chat.id)
         send(message.chat.id, t["deleted"], markup=types.ReplyKeyboardRemove())
     else:
         send(message.chat.id, t["delete_hint"])
 
 
+def handle_help(message) -> None:
+    s = user(message, touch=False)
+    send(message.chat.id, T[s["lang"]]["help"], markup=main_keyboard(s["lang"]))
+
+
+def _args(message) -> str:
+    return (message.text or "").partition(" ")[2].strip()
+
+
+def handle_price(message) -> None:
+    s = user(message)
+    tt = tools.TT[s["lang"]]
+    q = _args(message)
+    if not q:
+        send(message.chat.id, tt["price_usage"])
+        return
+    coin = tools.resolve(q)
+    if coin is None or not show_card(message.chat.id, s, coin["id"]):
+        send(message.chat.id, tt["not_found"].format(q=html.escape(q[:40])))
+
+
+def handle_alerts(message) -> None:
+    s = user(message)
+    text, kb = tools.alerts_view(message.chat.id, s)
+    send(message.chat.id, text, markup=kb)
+
+
+def handle_alert(message) -> None:
+    """/alert BTC 100000 — сразу создать; /alert BTC — выбрать уровень; /alert — список."""
+    s = user(message)
+    tt = tools.TT[s["lang"]]
+    parts = _args(message).split()
+    if not parts:
+        handle_alerts(message)
+        return
+    target = tools.parse_number("".join(parts[1:])) if len(parts) > 1 else None
+    coin = tools.resolve(parts[0])
+    if coin is None:
+        send(message.chat.id, tt["not_found"].format(q=html.escape(parts[0][:40])) + "\n\n" + tt["usage_alert"])
+        return
+    if len(parts) > 1 and target is None:
+        send(message.chat.id, tt["bad_number"].format(ex=tools._example(coin.get("current_price"))))
+        return
+    if target is None:
+        menu = tools.alert_menu(s, coin["id"])
+        if menu:
+            send(message.chat.id, menu[0], markup=menu[1])
+        return
+    send(message.chat.id, tools.add_alert(message.chat.id, s, coin["id"], target=target))
+
+
+def handle_portfolio(message) -> None:
+    s = user(message)
+    try:
+        text, kb = tools.portfolio_view(message.chat.id, s)
+    except Exception:
+        logger.exception("portfolio failed for %s", message.chat.id)
+        text, kb = T[s["lang"]]["err"], None
+    send(message.chat.id, text, markup=kb)
+
+
+def _parse_amount(text: str):
+    t = (text or "").strip()
+    return 0.0 if re.fullmatch(r"0+([.,]0*)?", t) else tools.parse_number(t)
+
+
+def _set_holding_from_text(chat_id: int, s: dict, text: str) -> None:
+    """'BTC 0.5' -> сохранить; ошибки — с подсказкой."""
+    tt = tools.TT[s["lang"]]
+    parts = text.split()
+    if len(parts) < 2:
+        send(chat_id, tt["pf_usage"])
+        return
+    amount = _parse_amount(parts[-1])
+    coin = tools.resolve(" ".join(parts[:-1]))
+    if coin is None:
+        send(chat_id, tt["not_found"].format(q=html.escape(" ".join(parts[:-1])[:40])))
+    elif amount is None:
+        send(chat_id, tt["bad_number"].format(ex="0.5"))
+    else:
+        send(chat_id, tools.set_holding(chat_id, s, coin["id"], amount))
+
+
+def handle_add(message) -> None:
+    s = user(message)
+    _set_holding_from_text(message.chat.id, s, _args(message))
+
+
+def handle_invite(message) -> None:
+    s = user(message)
+    text, kb = social.invite_view(s["lang"], message.chat.id, BOT_USERNAME,
+                                  db.referral_count(message.chat.id), INLINE_OK)
+    send(message.chat.id, text, markup=kb)
+
+
+def handle_cancel(message) -> None:
+    s = user(message, touch=False)
+    tools.pop_pending(message.chat.id)
+    send(message.chat.id, tools.TT[s["lang"]]["cancelled"], markup=main_keyboard(s["lang"]))
+
+
+def handle_text(message) -> None:
+    """Любой другой текст: ответ на вопрос (цена/количество) или поиск монеты по тикеру."""
+    s = user(message)
+    chat_id, text = message.chat.id, message.text.strip()
+    tt = tools.TT[s["lang"]]
+    pending = tools.pop_pending(chat_id)
+    if pending:
+        kind, coin_id = pending
+        if kind == "alert":
+            target = tools.parse_number(text)
+            if target is None:
+                tools.set_pending(chat_id, kind, coin_id)  # ждём ещё одну попытку
+                q, placeholder = tools.ask_price_text(s, coin_id)
+                ask(chat_id, tt["bad_number"].format(ex=tools._example(
+                    (tools._coin_in(s["currency"], coin_id) or {}).get("current_price"))), placeholder)
+            else:
+                send(chat_id, tools.add_alert(chat_id, s, coin_id, target=target))
+            return
+        if kind == "pf":
+            amount = _parse_amount(text)
+            if amount is None:
+                tools.set_pending(chat_id, kind, coin_id)
+                ask(chat_id, tt["bad_number"].format(ex="0.5"), tt["placeholder_amount"])
+            else:
+                send(chat_id, tools.set_holding(chat_id, s, coin_id, amount))
+            return
+        if kind == "pfadd":
+            _set_holding_from_text(chat_id, s, text)
+            return
+    coin = tools.resolve(text)
+    if coin is not None and show_card(chat_id, s, coin["id"]):
+        return
+    if len(text) <= 24 and len(text.split()) <= 2:
+        send(chat_id, tt["not_found"].format(q=html.escape(text)))
+    else:
+        send(chat_id, tt["unknown"], markup=main_keyboard(s["lang"]))
+
+
 def guarded(handler):
-    """Любая ошибка в обработчике: в лог (и алерт админу), пользователю — ничего не ломаем."""
+    """Любая ошибка в обработчике: в лог (и алерт админу), пользователю — ничего не ломаем.
+    Заодно защита от флуда."""
     def wrapper(message):
         try:
+            if flooded(message.chat.id):
+                return
             handler(message)
         except Exception:
             logger.exception("Handler %s failed (chat %s)", handler.__name__, message.chat.id)
@@ -716,40 +1120,45 @@ def guarded(handler):
     return wrapper
 
 
-bot.message_handler(commands=["start"])(guarded(handle_start))
-bot.message_handler(commands=["top"])(guarded(handle_top))
-bot.message_handler(commands=["settings"])(guarded(handle_settings))
-bot.message_handler(commands=["stop"])(guarded(handle_stop))
-bot.message_handler(commands=["delete"])(guarded(handle_delete))
-bot.message_handler(commands=["profile"])(guarded(handle_profile))
-bot.message_handler(commands=["game"])(guarded(handle_game))
-bot.message_handler(commands=["leaderboard"])(guarded(handle_leaderboard))
-
-
-@bot.message_handler(commands=["help"])
-@guarded
-def on_help(message):
-    s = db.ensure_user(message.chat.id, message.from_user, touch=False).settings
-    send(message.chat.id, T[s["lang"]]["help"])
+for _cmds, _h in (
+    (["start"], handle_start), (["top"], handle_top), (["settings"], handle_settings),
+    (["stop"], handle_stop), (["delete"], handle_delete), (["profile"], handle_profile),
+    (["game"], handle_game), (["leaderboard"], handle_leaderboard), (["help"], handle_help),
+    (["price", "p"], handle_price), (["alerts"], handle_alerts), (["alert"], handle_alert),
+    (["portfolio", "pf"], handle_portfolio), (["add"], handle_add), (["invite", "ref"], handle_invite),
+    (["cancel"], handle_cancel),
+):
+    bot.message_handler(commands=_cmds)(guarded(_h))
 
 
 def _private_text_in(m, words: set) -> bool:
     return m.chat.type == "private" and bool(m.text) and m.text.strip().lower() in words
 
 
-START_WORDS = {"start", "старт"}
-TOP_WORDS = {"top", "топ"} | {T[x]["btn_top"].lower() for x in T}
-SETTINGS_WORDS = {"settings", "настройки"} | {T[x]["btn_settings"].lower() for x in T}
-GAME_WORDS = {"game", "игра"} | {T[x]["btn_game"].lower() for x in T}
+def _btn_words(key: str, *extra) -> set:
+    return set(extra) | {T[x][key].lower() for x in T}
 
-bot.message_handler(func=lambda m: _private_text_in(m, START_WORDS))(guarded(handle_start))
-bot.message_handler(func=lambda m: _private_text_in(m, TOP_WORDS))(guarded(handle_top))
-bot.message_handler(func=lambda m: _private_text_in(m, SETTINGS_WORDS))(guarded(handle_settings))
-bot.message_handler(func=lambda m: _private_text_in(m, GAME_WORDS))(guarded(handle_game))
+
+START_WORDS = {"start", "старт"}
+TOP_WORDS = _btn_words("btn_top", "top", "топ")
+SETTINGS_WORDS = _btn_words("btn_settings", "settings", "настройки")
+GAME_WORDS = _btn_words("btn_game", "game", "игра")
+PF_WORDS = _btn_words("btn_pf", "portfolio", "портфель")
+ALERTS_WORDS = _btn_words("btn_alerts", "alerts", "алерты")
+INVITE_WORDS = _btn_words("btn_invite", "invite", "пригласить")
+
+for _words, _h in ((START_WORDS, handle_start), (TOP_WORDS, handle_top), (SETTINGS_WORDS, handle_settings),
+                   (GAME_WORDS, handle_game), (PF_WORDS, handle_portfolio), (ALERTS_WORDS, handle_alerts),
+                   (INVITE_WORDS, handle_invite)):
+    bot.message_handler(func=lambda m, w=_words: _private_text_in(m, w))(guarded(_h))
+
+# последним: любой другой текст в личке (тикер монеты или ответ на вопрос бота)
+bot.message_handler(func=lambda m: m.chat.type == "private" and bool(m.text) and not m.text.startswith("/"),
+                    content_types=["text"])(guarded(handle_text))
 
 
 # ------------------------------------------------------------------
-# Кнопки: онбординг (ob:*) и игра (g:*)
+# Кнопки: онбординг (ob:*), игра (g:*), карточка монеты (c:*), алерты (pa:*), портфель (pf:*)
 # ------------------------------------------------------------------
 def edit(call, text: str, markup=None) -> None:
     try:
@@ -762,22 +1171,25 @@ def edit(call, text: str, markup=None) -> None:
 
 def on_onboarding(call, parts: list, chat_id: int) -> None:
     action = parts[1]
-    if action == "lang" and parts[2] in S.LANGS:
+    if action == "langs":
+        edit(call, "🌍 <b>Choose your language · Выберите язык</b>", lang_picker_markup())
+    elif action == "lang" and len(parts) > 2 and parts[2] in S.LANGS:
         state = db.save_settings(chat_id, {"lang": parts[2]})
         lang = state.settings["lang"]
         edit(call, profile_text(lang), profile_markup(lang))
-    elif action == "prof":
+    elif action == "prof" and len(parts) > 2:
         lang = db.get_state(chat_id).settings["lang"]
         name = parts[2]
         if name == "custom":
             edit(call, T[lang]["ob_custom"], settings_markup(lang))
+            send(chat_id, T[lang]["tips"], markup=main_keyboard(lang))
             return
         if name not in S.PROFILES:
             return
         s = db.save_settings(chat_id, S.PROFILES[name]).settings
         edit(call, T[lang]["ob_done"].format(name=PROF[lang][name][0], summary=summary(s)))
         try:
-            send(chat_id, prices_text(s) or T[lang]["err"], markup=main_keyboard(lang))
+            send(chat_id, prices_text(s, chat_id) or T[lang]["err"], markup=main_keyboard(lang))
         except Exception:
             logger.exception("onboarding: prices failed for %s", chat_id)
             send(chat_id, T[lang]["err"], markup=main_keyboard(lang))
@@ -785,18 +1197,31 @@ def on_onboarding(call, parts: list, chat_id: int) -> None:
     elif action == "tz":
         s = db.get_state(chat_id).settings
         edit(call, T[s["lang"]]["ob_tz_ok"].format(tz=s["tz"]))
+        send(chat_id, T[s["lang"]]["tips"])
 
 
-def on_game(call, parts: list, chat_id: int, lang: str) -> None:
-    action = parts[1]
+def _int(x, default=None):
+    try:
+        return int(x)
+    except (TypeError, ValueError):
+        return default
+
+
+def on_game(call, parts: list, chat_id: int, s: dict) -> None:
+    lang, action = s["lang"], parts[1]
     if action == "new":  # новая карточка отдельным сообщением (не затираем отчёт)
         text, kb = game.new_card(lang)
         send(chat_id, text, markup=kb)
     elif action == "next":
-        text, kb = game.new_card(lang, exclude=parts[2])
+        text, kb = game.new_card(lang, exclude=parts[2], horizon=_int(parts[3] if len(parts) > 3 else None,
+                                                                         game.DEFAULT_H))
+        edit(call, text, kb)
+    elif action == "h" and len(parts) >= 4:  # смена срока прогноза на карточке
+        text, kb = game.new_card(lang, coin_id=parts[2], horizon=_int(parts[3], game.DEFAULT_H))
         edit(call, text, kb)
     elif action == "p" and len(parts) >= 4:
-        text, kb, ok = game.place(chat_id, lang, parts[2], parts[3])
+        horizon = _int(parts[4], game.DEFAULT_H) if len(parts) > 4 else game.DEFAULT_H
+        text, kb, ok = game.place(chat_id, lang, parts[2], parts[3], horizon, local_today(s))
         edit(call, text, kb)
         count("game_predictions" if ok else "game_rejected")
     elif action == "lb":
@@ -810,23 +1235,125 @@ def on_game(call, parts: list, chat_id: int, lang: str) -> None:
         send(chat_id, text, markup=kb)
 
 
-@bot.callback_query_handler(func=lambda c: bool(c.data) and c.data.split(":")[0] in ("ob", "g"))
+def on_coin(call, parts: list, chat_id: int, s: dict):
+    """Кнопки карточки монеты. Возвращает текст всплывающей подсказки или None."""
+    action, coin_id = parts[1], parts[2] if len(parts) > 2 else ""
+    tt = tools.TT[s["lang"]]
+    if action == "r":  # обновить карточку на месте
+        show_card(chat_id, s, coin_id, call=call)
+    elif action == "o":  # открыть карточку новым сообщением (из алерта)
+        show_card(chat_id, s, coin_id)
+    elif action == "g":
+        text, kb = game.new_card(s["lang"], coin_id=coin_id)
+        send(chat_id, text, markup=kb)
+    elif action == "fav":
+        coins = list(s["custom_coins"])
+        if coin_id in coins:
+            coins.remove(coin_id)
+            toast = tt["fav_removed"]
+        elif len(coins) >= S.SPEC["custom_coins"]["max"]:
+            return tt["fav_full"]
+        else:
+            coins.append(coin_id)
+            toast = tt["fav_added"] if s["list_mode"] == "custom" else tt["fav_added_hint"]
+        try:
+            s = db.save_settings(chat_id, {"custom_coins": coins}).settings
+        except ValueError:  # нельзя убрать последнюю монету в режиме «Мои монеты»
+            return "⚠️"
+        show_card(chat_id, s, coin_id, call=call)
+        return toast
+    return None
+
+
+def on_price_alert(call, parts: list, chat_id: int, s: dict):
+    action = parts[1]
+    tt = tools.TT[s["lang"]]
+    if action == "menu" and len(parts) > 2:
+        menu = tools.alert_menu(s, parts[2])
+        if menu:
+            send(chat_id, menu[0], markup=menu[1])
+    elif action == "add" and len(parts) > 3:
+        pct = _int(parts[3])
+        if pct is not None and abs(pct) in tools.LEVELS:
+            edit(call, tools.add_alert(chat_id, s, parts[2], pct=pct))
+    elif action == "ask" and len(parts) > 2:
+        text, placeholder = tools.ask_price_text(s, parts[2])
+        if text:
+            tools.set_pending(chat_id, "alert", parts[2])
+            ask(chat_id, text, placeholder)
+    elif action == "del" and len(parts) > 2:
+        db.alert_delete(chat_id, _int(parts[2], 0))
+        text, kb = tools.alerts_view(chat_id, s)
+        edit(call, text, kb)
+        return tt["deleted"]
+    return None
+
+
+def on_portfolio(call, parts: list, chat_id: int, s: dict):
+    action = parts[1]
+    tt = tools.TT[s["lang"]]
+    if action == "ask" and len(parts) > 2:
+        text = tools.ask_amount_text(s, parts[2])
+        if text:
+            tools.set_pending(chat_id, "pf", parts[2])
+            ask(chat_id, text, tt["placeholder_amount"])
+    elif action == "add":
+        tools.set_pending(chat_id, "pfadd")
+        ask(chat_id, tt["pf_add_ask"], "BTC 0.5")
+    elif action == "view":
+        text, kb = tools.portfolio_view(chat_id, s)
+        edit(call, text, kb)
+    return None
+
+
+CALLBACK_PREFIXES = ("ob", "g", "c", "pa", "pf")
+
+
+@bot.callback_query_handler(func=lambda c: bool(c.data) and c.data.split(":")[0] in CALLBACK_PREFIXES)
 def on_callback(call):
     chat_id = call.message.chat.id
+    toast = None
     try:
-        lang = db.ensure_user(chat_id, call.from_user, touch=False).settings["lang"]
+        if flooded(chat_id):
+            return
+        s = db.ensure_user(chat_id, call.from_user, touch=False).settings
         parts = call.data.split(":")
-        if parts[0] == "ob":
+        kind = parts[0]
+        if kind == "ob":
             on_onboarding(call, parts, chat_id)
-        else:
-            on_game(call, parts, chat_id, lang)
+        elif kind == "g":
+            on_game(call, parts, chat_id, s)
+        elif kind == "c":
+            toast = on_coin(call, parts, chat_id, s)
+        elif kind == "pa":
+            toast = on_price_alert(call, parts, chat_id, s)
+        elif kind == "pf":
+            toast = on_portfolio(call, parts, chat_id, s)
     except Exception:
         logger.exception("Callback %s failed (chat %s)", call.data, chat_id)
     finally:
         try:
-            bot.answer_callback_query(call.id)
+            bot.answer_callback_query(call.id, text=toast)
         except Exception:
             pass
+
+
+# ------------------------------------------------------------------
+# Inline-режим: @bot btc в любом чате — карточка монеты с кнопкой «Открыть бота» (реферальной)
+# ------------------------------------------------------------------
+@bot.inline_handler(func=lambda q: True)
+def on_inline(query):
+    try:
+        st = db.get_state(query.from_user.id)
+        if st is not None:
+            lang, cur = st.settings["lang"], st.settings["currency"]
+        else:
+            lang, cur = social.detect_lang(query.from_user.language_code) or "en", "usd"
+        results = social.inline_results(query.query[:40], lang, cur, BOT_USERNAME, query.from_user.id)
+        bot.answer_inline_query(query.id, results, cache_time=30, is_personal=True)
+        count("inline_queries")
+    except Exception:
+        logger.exception("Inline query failed")
 
 
 # ------------------------------------------------------------------
@@ -911,10 +1438,8 @@ def on_broadcast_choice(call):
 # ------------------------------------------------------------------
 def setup_telegram_ui() -> None:
     try:
-        for lang, names in COMMANDS.items():
-            cmds = [types.BotCommand(c, d) for c, d in zip(
-                ("top", "settings", "stop", "start", "help", "game", "leaderboard", "profile"),
-                names + COMMANDS_EXTRA[lang])]
+        for lang, names in CMD_DESC.items():
+            cmds = [types.BotCommand(c, d) for c, d in zip(CMD_ORDER, names)]
             bot.set_my_commands(cmds, language_code=None if lang == "en" else lang)
         if config.WEBAPP_URL:
             bot.set_chat_menu_button(menu_button=types.MenuButtonWebApp(
@@ -923,6 +1448,23 @@ def setup_telegram_ui() -> None:
             logger.warning("WEBAPP_URL not set: settings button is disabled")
     except Exception:
         logger.exception("Failed to configure Telegram UI")
+
+
+def load_identity() -> None:
+    """Имя бота (для реферальных ссылок) и включён ли inline-режим. Повторяем при сетевых сбоях."""
+    global BOT_USERNAME, INLINE_OK
+    for attempt in range(5):
+        try:
+            me = bot.get_me()
+            BOT_USERNAME, INLINE_OK = me.username, bool(me.supports_inline_queries)
+            if not INLINE_OK:
+                logger.warning("Inline mode is off: enable it in @BotFather -> /setinline "
+                               "to let users share coin cards in any chat")
+            return
+        except Exception as e:
+            logger.warning("get_me failed (%s), retrying", e)
+            time.sleep(3 * (attempt + 1))
+    logger.error("Could not load bot identity: invite links and sharing are disabled")
 
 
 def shutdown(signum, frame) -> None:
@@ -935,6 +1477,7 @@ def main() -> None:
     db.init_db()
     if config.USER_CHAT_IDS:
         db.seed_users(config.USER_CHAT_IDS)
+    load_identity()
     setup_telegram_ui()
 
     threads = [
@@ -944,6 +1487,7 @@ def main() -> None:
         threading.Thread(target=moves_loop, name="moves"),
         threading.Thread(target=weekly_loop, name="weekly"),
         threading.Thread(target=game_loop, name="game"),
+        threading.Thread(target=price_alerts_loop, name="price_alerts"),
     ]
     for th in threads:
         th.start()
@@ -955,7 +1499,7 @@ def main() -> None:
     try:
         bot.infinity_polling(
             timeout=60, long_polling_timeout=20,  # read-timeout = 60 с: запас на сетевые подвисания
-            allowed_updates=["message", "callback_query"],
+            allowed_updates=["message", "callback_query", "inline_query"],
         )
     finally:
         stop.set()
@@ -963,6 +1507,7 @@ def main() -> None:
             th.join(timeout=20)
         alerts.notify("⏹ Бот остановлен", key="stop", cooldown=0)
         alerts.flush()
+        db.pool.close()  # иначе при выходе psycopg_pool падает в __del__ (PythonFinalizationError)
 
 
 if __name__ == "__main__":

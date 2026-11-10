@@ -26,6 +26,8 @@ SPEC = {
     "custom_coins": {"type": "coins", "max": 10},
     "show_indices": {"type": "bool"},
     "game_hide_name": {"type": "bool"},
+    "game_reminders": {"type": "bool"},
+    "show_portfolio": {"type": "bool"},
     "weekly_enabled": {"type": "bool"},
     "weekly_day": {"type": "enum", "values": [0, 1, 2, 3, 4, 5, 6]},
     "move_alerts": {"type": "bool"},
@@ -56,6 +58,8 @@ DEFAULTS = {
     "custom_coins": [],
     "show_indices": True,
     "game_hide_name": False,
+    "game_reminders": True,
+    "show_portfolio": True,
     "weekly_enabled": True,
     "weekly_day": 6,
     "move_alerts": True,
@@ -228,7 +232,7 @@ PROFILES = {
         "enabled": True, "report_interval": 24, "anchor_hour": 9,
         "analytics_enabled": False, "facts_enabled": False,
         "list_mode": "top", "coins_count": 5, "show_indices": False,
-        "move_alerts": True, "move_threshold": 10,
+        "move_alerts": True, "move_threshold": 15,  # «только сильные движения» — строже, чем у новичка
         "quiet_enabled": True, "quiet_start": 23, "quiet_end": 8, "weekly_enabled": True,
     },
     "explorer": {

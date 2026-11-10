@@ -2,6 +2,7 @@
 import logging
 from collections import namedtuple
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
@@ -105,6 +106,37 @@ MIGRATIONS = [
     CREATE INDEX game_pred_due_idx ON game_predictions (resolve_at) WHERE NOT resolved;
     CREATE INDEX game_pred_user_idx ON game_predictions (chat_id) WHERE NOT resolved;
     """,
+    # 5: ценовые алерты, портфель, рефералы, ежедневная серия в игре
+    """
+    CREATE TABLE price_alerts (
+        id           BIGSERIAL PRIMARY KEY,
+        chat_id      BIGINT NOT NULL REFERENCES users(chat_id) ON DELETE CASCADE,
+        coin_id      TEXT NOT NULL,
+        symbol       TEXT NOT NULL,
+        currency     TEXT NOT NULL,
+        target       DOUBLE PRECISION NOT NULL,
+        direction    SMALLINT NOT NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        triggered_at TIMESTAMPTZ
+    );
+    CREATE INDEX price_alerts_active_idx ON price_alerts (currency, coin_id) WHERE triggered_at IS NULL;
+    CREATE INDEX price_alerts_user_idx ON price_alerts (chat_id) WHERE triggered_at IS NULL;
+    CREATE TABLE holdings (
+        chat_id    BIGINT NOT NULL REFERENCES users(chat_id) ON DELETE CASCADE,
+        coin_id    TEXT NOT NULL,
+        symbol     TEXT NOT NULL,
+        amount     DOUBLE PRECISION NOT NULL CHECK (amount > 0),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (chat_id, coin_id)
+    );
+    ALTER TABLE users ADD COLUMN referred_by BIGINT;
+    CREATE INDEX users_referred_by_idx ON users (referred_by) WHERE referred_by IS NOT NULL;
+    ALTER TABLE game_players
+        ADD COLUMN last_play       DATE,
+        ADD COLUMN day_streak      INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN best_day_streak INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN reminded_on     DATE;
+    """,
 ]
 
 
@@ -143,10 +175,13 @@ def ensure_user(chat_id: int, user=None, subscribe=None, touch: bool = True) -> 
     with pool.connection() as conn:
         conn.execute(
             """
-            INSERT INTO users (chat_id, settings, next_report_at, next_analytics_at, next_facts_at)
-            VALUES (%s, '{}'::jsonb, %s, %s, %s) ON CONFLICT (chat_id) DO NOTHING
+            INSERT INTO users (chat_id, settings, subscribed, next_report_at, next_analytics_at,
+                               next_facts_at)
+            VALUES (%s, '{}'::jsonb, %s, %s, %s, %s) ON CONFLICT (chat_id) DO NOTHING
             """,
-            (chat_id, nr0, na0, nf0),
+            # подписываем только по /start: после /delete нажатие старой кнопки не должно
+            # молча возвращать рассылку
+            (chat_id, bool(subscribe), nr0, na0, nf0),
         )
         stored, subscribed, nr, na, nf = conn.execute(
             "SELECT settings, subscribed, next_report_at, next_analytics_at, next_facts_at "
@@ -273,6 +308,23 @@ def set_meta(key: str, value: str) -> None:
 
 def get_stats() -> dict:
     with pool.connection() as conn:
+        growth = conn.execute(
+            """
+            SELECT count(*) FILTER (WHERE last_seen_at > now() - interval '1 day'),
+                   count(*) FILTER (WHERE last_seen_at > now() - interval '7 days'),
+                   count(*) FILTER (WHERE created_at > now() - interval '1 day'),
+                   count(*) FILTER (WHERE created_at > now() - interval '7 days'),
+                   count(*) FILTER (WHERE referred_by IS NOT NULL AND created_at > now() - interval '7 days')
+            FROM users
+            """
+        ).fetchone()
+        extra = conn.execute(
+            """
+            SELECT (SELECT count(*) FROM price_alerts WHERE triggered_at IS NULL),
+                   (SELECT count(DISTINCT chat_id) FROM holdings),
+                   (SELECT count(*) FROM game_players WHERE last_play >= current_date - 1)
+            """
+        ).fetchone()
         row = conn.execute(
             """
             SELECT count(*),
@@ -290,7 +342,10 @@ def get_stats() -> dict:
             "WHERE subscribed AND NOT blocked GROUP BY 1 ORDER BY 2 DESC"
         ).fetchall()
     return {"total": row[0], "active": row[1], "blocked": row[2], "analytics": row[3],
-            "facts": row[4], "langs": {k: v for k, v in langs}}
+            "facts": row[4], "langs": {k: v for k, v in langs},
+            "dau": growth[0], "wau": growth[1], "new_1d": growth[2], "new_7d": growth[3],
+            "ref_7d": growth[4], "price_alerts": extra[0], "portfolios": extra[1],
+            "players_2d": extra[2]}
 
 
 def active_currencies_langs() -> tuple:
@@ -435,6 +490,7 @@ def cleanup() -> None:
         conn.execute("DELETE FROM move_alerts WHERE sent_at < now() - interval '2 days'")
         conn.execute("DELETE FROM facts WHERE id IN (SELECT id FROM facts ORDER BY id DESC OFFSET 1500)")
         conn.execute("DELETE FROM game_predictions WHERE resolved AND created_at < now() - interval '30 days'")
+        conn.execute("DELETE FROM price_alerts WHERE triggered_at < now() - interval '30 days'")
 
 
 # ------------------------------------------------------------------
@@ -508,6 +564,19 @@ def mark_facts_seen(pairs: list) -> None:
 _FAR = datetime(9999, 1, 1, tzinfo=timezone.utc)
 
 
+def _next_allowed(s: dict, now: datetime, until: datetime):
+    """Ближайшее начало часа после now (до until включительно и в тот же локальный день),
+    когда отправка разрешена. None — сегодня уже нельзя (итоги этой недели пропускаем)."""
+    tz = ZoneInfo(s["tz"])
+    day = now.astimezone(tz).date()
+    t = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    while t <= until and t.astimezone(tz).date() == day:
+        if S.is_allowed_now(s, t):
+            return t
+        t += timedelta(hours=1)
+    return None
+
+
 def claim_weekly(limit: int = 200) -> list:
     """Пользователи, которым пора отправить итоги недели: [(chat_id, settings)].
     Слот в локальное время пользователя; не попали в тихие часы/дни — повторяем каждую минуту
@@ -536,7 +605,10 @@ def claim_weekly(limit: int = 200) -> list:
             elif (now - nw).total_seconds() > 12 * 3600:
                 updates.append((upcoming(), chat_id))
             elif not S.is_allowed_now(s, now):
-                continue  # подождём, пока кончатся тихие часы
+                # тихие часы/выходной день: переносим слот на первый разрешённый час в пределах
+                # 12 ч от исходного (раньше строка оставалась «просроченной», каждую минуту
+                # выбиралась заново и при >limit таких пользователей блокировала очередь)
+                updates.append((_next_allowed(s, now, nw + timedelta(hours=12)) or upcoming(), chat_id))
             else:
                 updates.append((upcoming(), chat_id))
                 jobs.append((chat_id, s))
@@ -566,14 +638,36 @@ def game_open_predictions(chat_id: int) -> list:
 
 
 def game_create(chat_id: int, coin_id: str, symbol: str, direction: int, horizon_h: int,
-                price: float) -> None:
+                price: float, today=None) -> tuple:
+    """Атомарно создаёт прогноз. Возвращает (статус 'ok' | 'limit' | 'dup', бонус дня, серия дней).
+    Строка пользователя блокируется, поэтому двойное нажатие кнопки не обходит лимит.
+    today — локальная дата пользователя (для ежедневной серии)."""
     now = _now()
+    today = today or now.date()
     with pool.connection() as conn:
+        conn.execute("SELECT 1 FROM users WHERE chat_id = %s FOR UPDATE", (chat_id,))
+        open_ids = [r[0] for r in conn.execute(
+            "SELECT coin_id FROM game_predictions WHERE chat_id = %s AND NOT resolved", (chat_id,))]
+        if len(open_ids) >= GAME_OPEN_LIMIT:
+            return "limit", 0, 0
+        if coin_id in open_ids:
+            return "dup", 0, 0
         conn.execute(
             "INSERT INTO game_predictions (chat_id, coin_id, symbol, direction, horizon_h, "
             "start_price, resolve_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
             (chat_id, coin_id, symbol, direction, horizon_h, price, now + timedelta(hours=horizon_h)),
         )
+        pl = _player_for_update(conn, chat_id, now)
+        bonus = 0
+        if pl["last_play"] != today:  # первый прогноз за день: серия и бонус
+            pl["day_streak"] = pl["day_streak"] + 1 if pl["last_play"] == today - timedelta(days=1) else 1
+            pl["best_day_streak"] = max(pl["best_day_streak"], pl["day_streak"])
+            pl["last_play"] = today
+            bonus = daily_bonus(pl["day_streak"])
+            pl["points"] += bonus
+            pl["week_points"] += bonus
+            _save_player(conn, chat_id, pl)
+    return "ok", bonus, pl["day_streak"]
 
 
 def game_due_count() -> int:
@@ -583,15 +677,24 @@ def game_due_count() -> int:
         ).fetchone()[0]
 
 
+_PLAYER_COLS = ("points", "week_points", "week_start", "streak", "best_streak", "wins", "losses",
+                "hidden", "last_play", "day_streak", "best_day_streak")
+DAILY_BONUS_MAX = 25
+
+
+def daily_bonus(day_streak: int) -> int:
+    """Бонус за первый прогноз дня: 5 баллов + 2 за каждый следующий день серии (максимум 25)."""
+    return min(5 + 2 * (day_streak - 1), DAILY_BONUS_MAX)
+
+
 def _player_for_update(conn, chat_id: int, now: datetime) -> dict:
     ws = _week_start(now)
     conn.execute("INSERT INTO game_players (chat_id, week_start) VALUES (%s, %s) "
                  "ON CONFLICT (chat_id) DO NOTHING", (chat_id, ws))
     row = conn.execute(
-        "SELECT points, week_points, week_start, streak, best_streak, wins, losses, hidden "
-        "FROM game_players WHERE chat_id = %s FOR UPDATE", (chat_id,)).fetchone()
-    p = dict(zip(("points", "week_points", "week_start", "streak", "best_streak", "wins",
-                  "losses", "hidden"), row))
+        "SELECT " + ", ".join(_PLAYER_COLS) + " FROM game_players WHERE chat_id = %s FOR UPDATE",
+        (chat_id,)).fetchone()
+    p = dict(zip(_PLAYER_COLS, row))
     if p["week_start"] != ws:  # началась новая неделя
         p["week_points"], p["week_start"] = 0, ws
     return p
@@ -599,15 +702,13 @@ def _player_for_update(conn, chat_id: int, now: datetime) -> dict:
 
 def _save_player(conn, chat_id: int, p: dict) -> None:
     conn.execute(
-        "UPDATE game_players SET points = %s, week_points = %s, week_start = %s, streak = %s, "
-        "best_streak = %s, wins = %s, losses = %s, hidden = %s WHERE chat_id = %s",
-        (p["points"], p["week_points"], p["week_start"], p["streak"], p["best_streak"],
-         p["wins"], p["losses"], p["hidden"], chat_id))
+        "UPDATE game_players SET " + ", ".join(f"{c} = %s" for c in _PLAYER_COLS) + " WHERE chat_id = %s",
+        (*[p[c] for c in _PLAYER_COLS], chat_id))
 
 
 def game_resolve_due(price_fn, score_fn, limit: int = 200) -> list:
     """Закрывает созревшие прогнозы. price_fn(coin_id) -> текущая цена или None;
-    score_fn(streak) -> очки. Возвращает результаты для уведомлений."""
+    score_fn(streak, horizon) -> очки. Возвращает результаты для уведомлений."""
     now, out = _now(), []
     with pool.connection() as conn:
         rows = conn.execute(
@@ -635,7 +736,7 @@ def game_resolve_due(price_fn, score_fn, limit: int = 200) -> list:
                 outcome, points = "loss", 0
             pl = _player_for_update(conn, chat_id, now)
             if outcome == "win":
-                points = score_fn(pl["streak"])
+                points = score_fn(pl["streak"], horizon)
                 pl["points"] += points
                 pl["week_points"] += points
                 pl["streak"] += 1
@@ -657,18 +758,169 @@ def game_player(chat_id: int):
     """Статистика игрока (очки недели с учётом смены недели) или None."""
     with pool.connection() as conn:
         row = conn.execute(
-            "SELECT points, week_points, week_start, streak, best_streak, wins, losses, hidden "
-            "FROM game_players WHERE chat_id = %s", (chat_id,)).fetchone()
+            "SELECT " + ", ".join(_PLAYER_COLS) + " FROM game_players WHERE chat_id = %s",
+            (chat_id,)).fetchone()
         open_n = conn.execute("SELECT count(*) FROM game_predictions WHERE chat_id = %s AND NOT resolved",
                               (chat_id,)).fetchone()[0]
     if row is None:
         return None
-    p = dict(zip(("points", "week_points", "week_start", "streak", "best_streak", "wins",
-                  "losses", "hidden"), row))
+    p = dict(zip(_PLAYER_COLS, row))
     if p["week_start"] != _week_start(_now()):
         p["week_points"] = 0
+    # серия дней прервана, если последний прогноз был раньше вчерашнего дня (с запасом на пояса)
+    if p["last_play"] is None or p["last_play"] < _now().date() - timedelta(days=2):
+        p["day_streak"] = 0
     p["open"] = open_n
     return p
+
+
+def game_add_points(chat_id: int, points: int) -> None:
+    """Бонусные баллы (например, за приглашённого друга)."""
+    with pool.connection() as conn:
+        pl = _player_for_update(conn, chat_id, _now())
+        pl["points"] += points
+        pl["week_points"] += points
+        _save_player(conn, chat_id, pl)
+
+
+def game_streak_candidates() -> list:
+    """Игроки с серией от 2 дней, игравшие недавно: [(chat_id, day_streak, last_play, reminded_on, settings)]."""
+    with pool.connection() as conn:
+        rows = conn.execute(
+            "SELECT p.chat_id, p.day_streak, p.last_play, p.reminded_on, u.settings "
+            "FROM game_players p JOIN users u ON u.chat_id = p.chat_id "
+            "WHERE p.day_streak >= 2 AND p.last_play >= current_date - 2 "
+            "AND u.subscribed AND NOT u.blocked").fetchall()
+    return [(r[0], r[1], r[2], r[3], S.merged(r[4])) for r in rows]
+
+
+def game_mark_reminded(chat_id: int, day) -> None:
+    with pool.connection() as conn:
+        conn.execute("UPDATE game_players SET reminded_on = %s WHERE chat_id = %s", (day, chat_id))
+
+
+# ------------------------------------------------------------------
+# Рефералы
+# ------------------------------------------------------------------
+def set_referrer(chat_id: int, referrer: int) -> bool:
+    """Запоминает, кто пригласил нового пользователя. True, если пригласивший существует."""
+    if chat_id == referrer:
+        return False
+    with pool.connection() as conn:
+        cur = conn.execute(
+            "UPDATE users SET referred_by = %s WHERE chat_id = %s AND referred_by IS NULL "
+            "AND EXISTS (SELECT 1 FROM users WHERE chat_id = %s)", (referrer, chat_id, referrer))
+        return cur.rowcount > 0
+
+
+def referral_count(chat_id: int) -> int:
+    with pool.connection() as conn:
+        return conn.execute("SELECT count(*) FROM users WHERE referred_by = %s", (chat_id,)).fetchone()[0]
+
+
+# ------------------------------------------------------------------
+# Ценовые алерты («сообщи, когда BTC будет $100k»)
+# ------------------------------------------------------------------
+def alert_add(chat_id: int, coin_id: str, symbol: str, currency: str, target: float,
+              direction: int, limit: int) -> str:
+    """'ok' | 'limit' | 'dup'"""
+    with pool.connection() as conn:
+        conn.execute("SELECT 1 FROM users WHERE chat_id = %s FOR UPDATE", (chat_id,))
+        rows = conn.execute(
+            "SELECT coin_id, currency, target FROM price_alerts WHERE chat_id = %s AND triggered_at IS NULL",
+            (chat_id,)).fetchall()
+        if len(rows) >= limit:
+            return "limit"
+        if any(r[0] == coin_id and r[1] == currency and abs(r[2] - target) <= 1e-9 * max(target, 1) for r in rows):
+            return "dup"
+        conn.execute(
+            "INSERT INTO price_alerts (chat_id, coin_id, symbol, currency, target, direction) "
+            "VALUES (%s, %s, %s, %s, %s, %s)", (chat_id, coin_id, symbol, currency, target, direction))
+    return "ok"
+
+
+def alerts_list(chat_id: int) -> list:
+    """[(id, coin_id, symbol, currency, target, direction)]"""
+    with pool.connection() as conn:
+        return conn.execute(
+            "SELECT id, coin_id, symbol, currency, target, direction FROM price_alerts "
+            "WHERE chat_id = %s AND triggered_at IS NULL ORDER BY created_at", (chat_id,)).fetchall()
+
+
+def alert_delete(chat_id: int, alert_id: int) -> bool:
+    with pool.connection() as conn:
+        return conn.execute("DELETE FROM price_alerts WHERE id = %s AND chat_id = %s AND triggered_at IS NULL",
+                            (alert_id, chat_id)).rowcount > 0
+
+
+def alerts_currencies() -> list:
+    with pool.connection() as conn:
+        return [r[0] for r in conn.execute(
+            "SELECT DISTINCT currency FROM price_alerts WHERE triggered_at IS NULL")]
+
+
+def alerts_trigger(currency: str, prices: dict) -> list:
+    """Атомарно помечает сработавшие алерты (цена пересекла уровень) и возвращает их:
+    [(chat_id, coin_id, symbol, target, direction, settings, subscribed_ok)]."""
+    if not prices:
+        return []
+    ids, vals = list(prices), [prices[k] for k in prices]
+    with pool.connection() as conn:
+        rows = conn.execute(
+            """
+            UPDATE price_alerts a SET triggered_at = now()
+            FROM unnest(%s::text[], %s::float8[]) AS p(coin_id, price)
+            WHERE a.triggered_at IS NULL AND a.currency = %s AND a.coin_id = p.coin_id
+              AND ((a.direction = 1 AND p.price >= a.target) OR (a.direction = -1 AND p.price <= a.target))
+            RETURNING a.chat_id, a.coin_id, a.symbol, a.target, a.direction
+            """, (ids, vals, currency)).fetchall()
+        if not rows:
+            return []
+        users = dict(conn.execute(
+            "SELECT chat_id, settings FROM users WHERE chat_id = ANY(%s) AND NOT blocked",
+            (list({r[0] for r in rows}),)).fetchall())
+    return [(r[0], r[1], r[2], r[3], r[4], S.merged(users[r[0]])) for r in rows if r[0] in users]
+
+
+# ------------------------------------------------------------------
+# Портфель
+# ------------------------------------------------------------------
+def holdings(chat_id: int) -> list:
+    """[(coin_id, symbol, amount)]"""
+    with pool.connection() as conn:
+        return conn.execute("SELECT coin_id, symbol, amount FROM holdings WHERE chat_id = %s "
+                            "ORDER BY updated_at", (chat_id,)).fetchall()
+
+
+def holdings_for(chat_ids: list) -> dict:
+    if not chat_ids:
+        return {}
+    out: dict = {}
+    with pool.connection() as conn:
+        for chat_id, coin_id, symbol, amount in conn.execute(
+                "SELECT chat_id, coin_id, symbol, amount FROM holdings WHERE chat_id = ANY(%s)",
+                (list(chat_ids),)):
+            out.setdefault(chat_id, []).append((coin_id, symbol, amount))
+    return out
+
+
+def set_holding(chat_id: int, coin_id: str, symbol: str, amount: float, limit: int) -> str:
+    """amount <= 0 удаляет монету. 'ok' | 'removed' | 'limit'"""
+    with pool.connection() as conn:
+        if amount <= 0:
+            conn.execute("DELETE FROM holdings WHERE chat_id = %s AND coin_id = %s", (chat_id, coin_id))
+            return "removed"
+        conn.execute("SELECT 1 FROM users WHERE chat_id = %s FOR UPDATE", (chat_id,))
+        n, has = conn.execute(
+            "SELECT count(*), count(*) FILTER (WHERE coin_id = %s) FROM holdings WHERE chat_id = %s",
+            (coin_id, chat_id)).fetchone()
+        if not has and n >= limit:
+            return "limit"
+        conn.execute(
+            "INSERT INTO holdings (chat_id, coin_id, symbol, amount) VALUES (%s, %s, %s, %s) "
+            "ON CONFLICT (chat_id, coin_id) DO UPDATE SET amount = EXCLUDED.amount, updated_at = now()",
+            (chat_id, coin_id, symbol, amount))
+    return "ok"
 
 
 def game_leaderboard(scope: str, chat_id: int, limit: int = 10) -> tuple:

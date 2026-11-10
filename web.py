@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -78,18 +79,20 @@ def current_user(request: Request) -> dict:
 
 
 _hits: dict = collections.defaultdict(collections.deque)
+_hits_lock = threading.Lock()  # sync-эндпоинты FastAPI выполняются в пуле потоков
 
 
 def rate_limit(uid: int, name: str, limit: int, per: int) -> None:
-    q, now = _hits[(uid, name)], time.time()
-    while q and now - q[0] > per:
-        q.popleft()
-    if len(q) >= limit:
-        raise HTTPException(status_code=429, detail="too many requests")
-    q.append(now)
-    if len(_hits) > 5000:
-        for key in [k for k, v in _hits.items() if not v or now - v[-1] > per]:
-            _hits.pop(key, None)
+    with _hits_lock:
+        q, now = _hits[(uid, name)], time.time()
+        while q and now - q[0] > per:
+            q.popleft()
+        if len(q) >= limit:
+            raise HTTPException(status_code=429, detail="too many requests")
+        q.append(now)
+        if len(_hits) > 5000:
+            for key in [k for k, v in _hits.items() if not v or now - v[-1] > per]:
+                _hits.pop(key, None)
 
 
 def _iso(dt):
@@ -137,8 +140,13 @@ def put_settings(request: Request, data: dict = Body(...)):
     picked = data.get("custom_coins")
     if isinstance(picked, list):
         known = {c["id"] for c in top_coins()}
+        # монеты, уже сохранённые раньше, разрешаем, даже если они выпали из топ-200:
+        # иначе мини-приложение шлёт их при каждом сохранении и любые настройки перестают сохраняться
+        state = db.get_state(user["id"])
+        if state is not None:
+            known |= set(state.settings["custom_coins"])
         if known and any(x not in known for x in picked):
-            raise HTTPException(status_code=400, detail="custom_coins: coin is not in the top 100")
+            raise HTTPException(status_code=400, detail="custom_coins: coin is not in the top 200")
     try:
         state = db.save_settings(user["id"], data)
     except ValueError as e:

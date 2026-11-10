@@ -1,6 +1,5 @@
 """Данные рынка (CoinGecko, кэш), новости, Gemini (аналитика и факты), сборка сообщения."""
 import calendar
-import collections
 import html
 import json
 import logging
@@ -318,6 +317,39 @@ def fmt_price(price, currency: str) -> str:
     else:
         num = f"{price:.8f}"
     return f"{sym}{num}" if prefix else f"{num}{sym}"
+
+
+def fmt_big(value, currency: str) -> str:
+    """1 920 000 000 000 -> $1.92T (капитализация, объёмы, стоимость портфеля)."""
+    if value is None:
+        return "—"
+    sym, prefix = CURRENCY_FMT.get(currency, ("$", True))
+    for div, suf in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if abs(value) >= div:
+            num = f"{value / div:.2f}{suf}"
+            break
+    else:
+        num = f"{value:.2f}"
+    return f"{sym}{num}" if prefix else f"{num}{sym}"
+
+
+def fmt_money(value, currency: str) -> str:
+    """Сумма с разделителями: $12 345.67 (для портфеля)."""
+    if value is None:
+        return "—"
+    if abs(value) < 1:
+        return fmt_price(value, currency) if value >= 0 else "-" + fmt_price(-value, currency)
+    sym, prefix = CURRENCY_FMT.get(currency, ("$", True))
+    sign = "-" if value < 0 else ""
+    num = f"{abs(value):,.2f}".replace(",", " ")
+    return f"{sign}{sym}{num}" if prefix else f"{sign}{num}{sym}"
+
+
+def fmt_pct(change) -> str:
+    """Короткое изменение с цветной точкой: 🟢 +1.23% / 🔴 -0.50%."""
+    if change is None:
+        return "⚪ —"
+    return f"{'🟢' if change >= 0 else '🔴'} {change:+.2f}%"
 
 
 def fmt_change(change) -> str:
@@ -838,7 +870,8 @@ def build_alert_text(s: dict, hits: list, price_data: list) -> str:
 # Сборка сообщения по настройкам пользователя
 # ------------------------------------------------------------------
 def compose(s: dict, want_report: bool, want_analytics: bool, want_facts: bool = False,
-            now: datetime = None, ai_cached_only: bool = False, fact_text: str = None):
+            now: datetime = None, ai_cached_only: bool = False, fact_text: str = None,
+            portfolio_text: str = None):
     """Текст сообщения или None. Аналитика и факт никогда не идут вместе:
     если пора аналитике, факт пропускается."""
     if want_analytics:
@@ -855,6 +888,8 @@ def compose(s: dict, want_report: bool, want_analytics: bool, want_facts: bool =
             mood = mood_line(data, lang)
             parts.append((f"<i>{mood}</i>\n\n" if mood else "") + block)
             has_report = True
+            if portfolio_text:
+                parts.append(portfolio_text)
             if s["show_indices"]:
                 line = indices_line(lang)
                 if line:
@@ -871,7 +906,7 @@ def compose(s: dict, want_report: bool, want_analytics: bool, want_facts: bool =
     return header + "\n\n" + "\n\n".join(parts)
 
 
-def compose_weekly(s: dict, game_line: str = None, now: datetime = None):
+def compose_weekly(s: dict, game_line: str = None, now: datetime = None, portfolio_text: str = None):
     """Итоги недели по монетам пользователя (7-дневное изменение). None, если данных нет."""
     now = now or datetime.now(timezone.utc)
     lang, lab = s["lang"], LABELS[s["lang"]]
@@ -901,6 +936,8 @@ def compose_weekly(s: dict, game_line: str = None, now: datetime = None):
         lines.append(f"{keycap(i)} {emoji}<b>{html.escape(sym)}</b>: "
                      f"{fmt_price(c.get('current_price'), s['currency'])} ({fmt_change(c[key])} · 7d)")
     parts.append("\n".join(lines))
+    if portfolio_text:
+        parts.append(portfolio_text)
     if s["show_indices"]:
         idx = indices_line(lang)
         if idx:
