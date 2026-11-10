@@ -33,7 +33,7 @@ COIN_EMOJIS = {
 CURRENCY_FMT = {"usd": ("$", True), "eur": ("€", True), "rub": (" ₽", False),
                 "uah": (" ₴", False), "kzt": (" ₸", False)}
 
-LANG_NAMES = {"ru": "Russian", "en": "English", "fr": "French", "es": "Spanish", "de": "German"}
+LANG_NAMES = {"ru": "Russian", "en": "English", "fr": "French", "es": "Spanish", "de": "German", "uk": "Ukrainian"}
 
 NEWS_FEEDS = ["https://forklog.com/feed/", "https://cointelegraph.com/rss"]
 
@@ -62,6 +62,9 @@ LABELS = {
     "de": {"hdr_market": "📊 <b>Marktübersicht, {time}</b>", "hdr_digest": "🧠 <b>Krypto-Digest, {time}</b>",
            "top": "🏆 <b>Top {n} Coins</b>", "gainers": "🚀 <b>Größte Gewinner</b>",
            "losers": "🔻 <b>Größte Verlierer</b>", "ai": "🧠 <b>Analyse:</b>", "fact": "💡 <b>Wussten Sie schon?</b>"},
+    "uk": {"hdr_market": "📊 <b>Огляд ринку на {time}</b>", "hdr_digest": "🧠 <b>Крипто-дайджест на {time}</b>",
+           "top": "🏆 <b>Топ-{n} монет</b>", "gainers": "🚀 <b>Лідери зростання</b>",
+           "losers": "🔻 <b>Лідери падіння</b>", "ai": "🧠 <b>Аналітика:</b>", "fact": "💡 <b>Цікавий факт:</b>"},
 }
 
 EXTRA = {
@@ -75,6 +78,8 @@ EXTRA = {
            "fng": "Miedo y Codicia", "dom": "Dominancia BTC"},
     "de": {"custom": "⭐ <b>Ihre Coins</b>", "alert_hdr": "🚨 <b>Wow, starke Bewegung!</b>", "alert_per": "in 1 Std.",
            "fng": "Angst & Gier", "dom": "BTC-Dominanz"},
+    "uk": {"custom": "⭐ <b>Ваші монети</b>", "alert_hdr": "🚨 <b>Ого, різкий рух!</b>", "alert_per": "за годину",
+           "fng": "Страх і жадібність", "dom": "Домінування BTC"},
 }
 WEEKLY_LABELS = {
     "en": {"weekly_title": "🗓 <b>Your week in crypto</b>", "weekly_best": "🏅 Best of the week: <b>{sym}</b> {chg}",
@@ -87,6 +92,8 @@ WEEKLY_LABELS = {
            "weekly_worst": "🥶 La más floja: <b>{sym}</b> {chg}"},
     "de": {"weekly_title": "🗓 <b>Ihre Krypto-Woche</b>", "weekly_best": "🏅 Beste der Woche: <b>{sym}</b> {chg}",
            "weekly_worst": "🥶 Schwächste Woche: <b>{sym}</b> {chg}"},
+    "uk": {"weekly_title": "🗓 <b>Ваш тиждень у крипті</b>", "weekly_best": "🏅 Найкраща за тиждень: <b>{sym}</b> {chg}",
+           "weekly_worst": "🥶 Найважча: <b>{sym}</b> {chg}"},
 }
 for _l in LABELS:
     LABELS[_l].update(EXTRA[_l])
@@ -104,6 +111,8 @@ MOOD = {
            "Un poco de rojo hoy 🍂", "Día duro — a aguantar 🫡🔴"],
     "de": ["Grüne Party am Markt! 🟢🎉", "Ein angenehmer grüner Tag 🌱", "Heute ruhige Gewässer 🌊",
            "Heute etwas Rot 🍂", "Harter Tag — durchhalten 🫡🔴"],
+    "uk": ["На ринку зелена вечірка! 🟢🎉", "Приємний зелений день 🌱", "Сьогодні штиль 🌊",
+           "Трохи червоного на ринку 🍂", "Важкий день на ринку — тримаємося 🫡🔴"],
 }
 
 # настроение недели (по среднему 7-дневному изменению монет пользователя)
@@ -118,6 +127,8 @@ WEEK_MOOD = {
            "Una semana algo complicada 🍂", "Semana dura — la superamos 🫡"],
     "de": ["Was für eine Woche — alles im grünen Bereich! 🟢🎉", "Eine solide grüne Woche 🌱",
            "Eine ruhige, stabile Woche 🌊", "Eine etwas holprige Woche 🍂", "Harte Woche — aber geschafft 🫡"],
+    "uk": ["Оце тиждень — усе в зеленому! 🟢🎉", "Гарний зелений тиждень 🌱", "Спокійний рівний тиждень 🌊",
+           "Трохи похмурий тиждень 🍂", "Важкий тиждень — але ми вистояли 🫡"],
 }
 
 # классы индекса Fear & Greed (как их отдаёт alternative.me)
@@ -131,6 +142,8 @@ FNG_CLASS = {
     "de": {"Extreme Fear": "Extreme Angst", "Fear": "Angst", "Neutral": "Neutral",
            "Greed": "Gier", "Extreme Greed": "Extreme Gier"},
     "en": {},
+    "uk": {"Extreme Fear": "Екстремальний страх", "Fear": "Страх", "Neutral": "Нейтрально",
+           "Greed": "Жадібність", "Extreme Greed": "Екстремальна жадібність"},
 }
 
 # Расчётная аналитика без Gemini: средний рост топ-10, лидеры, индекс страха и жадности, доминирование BTC
@@ -172,6 +185,15 @@ FALLBACK_AI = {
            "moods": {"Extreme Fear": "extreme Angst dominiert", "Fear": "Angst überwiegt",
                      "Neutral": "die Stimmung ist neutral", "Greed": "Optimismus überwiegt",
                      "Extreme Greed": "Euphorie, Vorsicht geboten"}},
+    "uk": {"up": "Топ-10 криптовалют показує середнє зростання {avg} за добу.",
+           "down": "Топ-10 криптовалют показує середнє падіння {avg} за добу.",
+           "flat": "Топ-10 криптовалют майже без змін за добу ({avg}).",
+           "leaders": "Лідери: {items}.", "drop": "Найсильніше знизилася: {items}.", "and": " і ",
+           "fng": "Індекс страху та жадібності на рівні {v}, {mood}.", "dom": "Домінування BTC: {v}.",
+           "moods": {"Extreme Fear": "що свідчить про сильний страх", "Fear": "що свідчить про переважання страху",
+                     "Neutral": "що свідчить про нейтральні настрої",
+                     "Greed": "що свідчить про переважання оптимізму",
+                     "Extreme Greed": "що свідчить про ейфорію, будьте обережні"}},
 }
 
 FALLBACK_FACTS = {
@@ -224,6 +246,16 @@ FALLBACK_FACTS = {
         "Die kleinste Einheit von Bitcoin heißt Satoshi: 0,00000001 BTC.",
         "Die Börse Mt. Gox ging 2014 nach dem Verlust von rund 850.000 BTC pleite — eines der größten Ereignisse der Marktgeschichte.",
         "Ein Smart Contract ist ein Programm auf einer Blockchain, das automatisch ausgeführt wird, sobald festgelegte Bedingungen erfüllt sind — ohne Vermittler.",
+    ],
+    "uk": [
+        "Генезис-блок Bitcoin (3 січня 2009) містить заголовок газети The Times про друге рятування банків.",
+        "22 травня 2010 року програміст заплатив 10 000 BTC за дві піци — перша відома покупка за біткоїн.",
+        "Емісія біткоїна обмежена 21 мільйоном монет, а винагорода майнерам зменшується вдвічі кожні 210 000 блоків (приблизно раз на чотири роки).",
+        "Ethereum запущено 30 липня 2015 року, а у вересні 2022 він перейшов на Proof-of-Stake (The Merge), скоротивши енергоспоживання мережі більш ніж на 99%.",
+        "Білу книгу Bitcoin Сатоші Накамото опублікував 31 жовтня 2008 року, і вона займає лише 9 сторінок.",
+        "Найменша одиниця біткоїна називається сатоші — це 0,00000001 BTC.",
+        "Біржа Mt. Gox збанкрутувала у 2014 році після втрати близько 850 000 BTC — одна з найбільших подій в історії ринку.",
+        "Смарт-контракт — це програма в блокчейні, яка виконується автоматично, щойно виконано задані умови, без посередника.",
     ],
 }
 
@@ -607,9 +639,9 @@ _cooldown: dict = {}  # (индекс ключа, модель) -> время, �
 _rr = {"i": 0}
 
 JSON_TAIL = (
-    "Return ONLY a valid JSON object with exactly these keys: en, ru, fr, es, de. Each value is "
+    "Return ONLY a valid JSON object with exactly these keys: en, ru, fr, es, de, uk. Each value is "
     "the same text written naturally (not word-for-word) in that language: English, Russian, "
-    "French, Spanish, German."
+    "French, Spanish, German, Ukrainian."
 )
 TONE = "Tone: friendly and light, a touch of humor, at most 1-2 fitting emojis."
 
@@ -804,7 +836,7 @@ def generate_fact_batch(n: int = 10, recent_topics=()) -> list:
         "invent numbers, dates, names or quotes; if unsure, skip the fact. No greetings, no "
         f"markdown. {TONE}\n"
         'Return ONLY valid JSON: {"facts": [{"topic": "<2-4 word English label>", "en": "...", '
-        '"ru": "...", "fr": "...", "es": "...", "de": "..."}]} where every language value is the '
+        '"ru": "...", "fr": "...", "es": "...", "de": "...", "uk": "..."}]} where every language value is the '
         "same fact written naturally in that language."
     )
     batch = _call_gemini(prompt, _parse_facts_batch)
@@ -822,8 +854,38 @@ def generate_fact_batch(n: int = 10, recent_topics=()) -> list:
     return [batch[i] for i in keep if 0 <= i < len(batch)]
 
 
+def _parse_translations(raw: str) -> dict:
+    data = _json_text(raw)
+    items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        raise ValueError("bad translation response")
+    out = {}
+    for it in items:
+        if isinstance(it, dict) and isinstance(it.get("id"), int) and isinstance(it.get("text"), str) and it["text"].strip():
+            out[it["id"]] = it["text"].strip()
+    if not out:
+        raise ValueError("no translations")
+    return out
+
+
+def translate_facts(items: list, lang: str) -> dict:
+    """Переводит факты пула на новый язык одним запросом к Gemini. items: [(id, english)].
+    Возвращает {id: перевод} (только для известных id)."""
+    if not items:
+        return {}
+    listing = "\n".join(json.dumps({"id": fid, "text": text}, ensure_ascii=False) for fid, text in items)
+    prompt = (
+        f"Translate each crypto fact below from English into {LANG_NAMES[lang]}. Write naturally, as a native "
+        "speaker would for a Telegram channel, keep the meaning, numbers, names and dates exactly, keep emojis. "
+        'Return ONLY valid JSON: {"items": [{"id": <same id>, "text": "<translation>"}]}.\n' + listing
+    )
+    result = _call_gemini(prompt, _parse_translations) or {}
+    known = {fid for fid, _ in items}
+    return {fid: text for fid, text in result.items() if fid in known}
+
+
 def format_fact(texts: dict, lang: str) -> str:
-    return f"{LABELS[lang]['fact']}\n{to_telegram_html(texts[lang])}"
+    return f"{LABELS[lang]['fact']}\n{to_telegram_html(texts.get(lang) or texts['en'])}"
 
 
 def fallback_text(kind: str, lang: str):

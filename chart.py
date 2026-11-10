@@ -35,13 +35,16 @@ CT = {
     "de": {"btn": "📈 Chart", "card": "📊 Karte", "p": {1: "24 Std.", 7: "7 T.", 30: "30 T."}, "lo": "Tief", "hi": "Hoch",
            "fail": "😕 Der Chart konnte gerade nicht erstellt werden — bitte in einer Minute erneut versuchen.",
            "usage": "Senden Sie einen Ticker, z. B. <code>/chart BTC</code> oder <code>/chart ETH 30d</code>"},
+    "uk": {"btn": "📈 Графік", "card": "📊 Картка", "p": {1: "24 год", 7: "7 дн", 30: "30 дн"}, "lo": "Мін", "hi": "Макс",
+           "fail": "😕 Не вдалося побудувати графік — спробуйте за хвилину.",
+           "usage": "Надішліть тікер, наприклад <code>/chart BTC</code> або <code>/chart ETH 30d</code>"},
 }
 
 
 PERIOD_WORDS = {
-    1: {"1", "24", "1d", "24h", "24ч", "d", "day", "день", "сутки"},
-    7: {"7", "7d", "7д", "w", "1w", "week", "неделя", "нед"},
-    30: {"30", "30d", "30д", "m", "1m", "month", "месяц", "мес"},
+    1: {"1", "24", "1d", "24h", "24ч", "24г", "d", "day", "день", "сутки", "доба"},
+    7: {"7", "7d", "7д", "w", "1w", "week", "неделя", "нед", "тиждень", "тиж"},
+    30: {"30", "30d", "30д", "m", "1m", "month", "месяц", "мес", "місяць", "міс"},
 }
 
 

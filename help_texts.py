@@ -192,6 +192,44 @@ HELP = {
         "/stop — Versand pausieren · /start — fortsetzen\n"
         "/cancel — Eingabe abbrechen · /delete — alle meine Daten löschen\n/help — diese Hilfe"
     ),
+    "uk": (
+        "📖 <b>Довідка — усе, що вміє бот</b>\n\n"
+        "📊 <b>Курси та звіти</b>\n"
+        "/top — курс просто зараз (плюс AI-аналітика та ваш портфель)\n"
+        "Ще я сам надсилаю звіти за вашим розкладом: курс, AI-аналітику ринку та цікаві факти про крипту. "
+        "Як часто — вирішуєте ви в /settings.\n\n"
+        "🔎 <b>Будь-яка монета з топ-200</b>\n"
+        "Просто напишіть тікер або назву: <code>BTC</code>, <code>eth</code>, <code>біткоїн</code> — або "
+        "<code>/price SOL</code>. У картці: ціна, зміна за 1 год/24 год/7 дн, капіталізація, обсяг, історичний "
+        "максимум і кнопки дій.\n\n"
+        "📈 <b>Графіки</b>\n"
+        "<code>/chart BTC</code> — за 24 години, <code>/chart ETH 7d</code> — за тиждень, <code>/chart SOL 30d</code> — "
+        "за місяць. Період перемикається кнопками під графіком.\n\n"
+        "🔔 <b>Алерти</b>\n"
+        "• Цінові: «напиши, коли BTC буде $100 000» — <code>/alert BTC 100000</code> або кнопка "
+        "«🔔 Алерт на ціну» в картці (рівні ±5/10/20% одним дотиком). До 10 штук, список і видалення — /alerts.\n"
+        "• Про різкі рухи: повідомлю, якщо ваші монети (або топ-10) сильно зрушили за годину. "
+        "Поріг — у налаштуваннях.\n\n"
+        "💼 <b>Портфель</b>\n"
+        "<code>/add BTC 0.5</code> — додати або змінити монету, <code>/add BTC 0</code> — прибрати. "
+        "/portfolio — вартість, дохід за добу та частки монет. Підсумок портфеля приходить і у звітах.\n\n"
+        "🎯 <b>Гра «Вгору чи вниз?»</b>\n"
+        "/game — вгадайте, куди піде ціна через 1, 4 або 24 години. За правильний прогноз 10–25 балів, плюс бонуси "
+        "за серію перемог і за гру щодня 🔥. /leaderboard — рейтинг тижня та всіх часів.\n\n"
+        "💬 <b>В інших чатах</b>\n"
+        "• У будь-якому чаті напишіть <code>@{bot} btc</code> — і надішліть картку монети співрозмовнику. "
+        "Просто <code>@{bot}</code> — огляд ринку.\n"
+        "• Додайте мене до групи: там працюють /top, /price, /chart і /game, а /start вмикає звіти "
+        "за розкладом для всієї групи (профіль — /profile).\n\n"
+        "🎁 <b>Друзі</b>\n"
+        "/invite — ваше особисте посилання: +50 балів у грі за кожного друга, який прийде.\n\n"
+        "⚙️ <b>Налаштування</b> — /settings\n"
+        "Мова, валюта (USD, EUR, RUB, UAH, KZT), частота звітів, тихі години та дні тижня, часовий пояс, "
+        "«мої монети», аналітика, факти, підсумки тижня. /profile — готові профілі одним дотиком.\n\n"
+        "🛠 <b>Керування</b>\n"
+        "/stop — призупинити розсилку · /start — увімкнути\n"
+        "/cancel — скасувати введення · /delete — видалити всі мої дані\n/help — ця довідка"
+    ),
 }
 
 # в группах мини-приложение настроек недоступно (ограничение Telegram)
@@ -201,6 +239,7 @@ GROUP_SETTINGS = {
     "fr": "⚙️ Dans les groupes, choisissez un profil prêt avec /profile. Les réglages détaillés sont disponibles en privé avec moi.",
     "es": "⚙️ En los grupos, elige un perfil listo con /profile. Los ajustes detallados están en un chat privado conmigo.",
     "de": "⚙️ In Gruppen wählen Sie ein fertiges Profil mit /profile. Detaillierte Einstellungen gibt es im Privatchat mit mir.",
+    "uk": "⚙️ У групах налаштування задаються готовим профілем: /profile. Детальні налаштування — в особистому чаті зі мною.",
 }
 
 # «Что умеет этот бот?» — видно до нажатия Start (до 512 символов) и в профиле бота (до 120)
@@ -220,6 +259,9 @@ DESCRIPTION = {
     "de": "👋 Ihr Krypto-Assistent in Telegram:\n\n📊 Kurse der Top-Coins nach Ihrem Zeitplan\n🧠 KI-Marktanalyse\n"
           "🔎 Karte für jeden Coin — einfach BTC senden\n📈 Kurscharts\n🔔 Preisalarme: „Sag Bescheid bei 100k“\n"
           "💼 Portfolio mit Tagesgewinn/-verlust\n🎯 Spiel „Hoch oder runter?“ mit Rangliste\n\nTippen Sie auf Start — die Einrichtung dauert 10 Sekunden.",
+    "uk": "👋 Ваш крипто-помічник у Telegram:\n\n📊 курс топ-монет за вашим розкладом\n🧠 AI-аналітика ринку\n"
+          "🔎 картка будь-якої монети — просто напишіть BTC\n📈 графіки ціни\n🔔 цінові алерти: «напиши, коли BTC буде 100k»\n"
+          "💼 портфель із доходом за добу\n🎯 гра «Вгору чи вниз?» з рейтингом\n\nНатисніть «Почати» — налаштування займе 10 секунд.",
 }
 SHORT_DESCRIPTION = {
     "en": "Crypto prices, AI analytics, charts, price alerts, portfolio and a prediction game.",
@@ -227,4 +269,5 @@ SHORT_DESCRIPTION = {
     "fr": "Cours crypto, analyse IA, graphiques, alertes de prix, portefeuille et jeu de pronostics.",
     "es": "Precios cripto, análisis IA, gráficos, alertas de precio, cartera y juego de predicciones.",
     "de": "Krypto-Kurse, KI-Analyse, Charts, Preisalarme, Portfolio und ein Tippspiel.",
+    "uk": "Курси крипти, AI-аналітика, графіки, цінові алерти, портфель і гра-прогноз.",
 }

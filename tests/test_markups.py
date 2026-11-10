@@ -25,7 +25,7 @@ def inline_on(monkeypatch):
     return bot
 
 
-@pytest.mark.parametrize("lang", ["en", "ru", "fr", "es", "de"])
+@pytest.mark.parametrize("lang", __import__("settings").LANGS)
 def test_all_markups_serialize(inline_on, fake_market, lang, monkeypatch):
     import game
     import social

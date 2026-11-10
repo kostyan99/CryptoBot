@@ -27,7 +27,7 @@ REF_BONUS = 50  # баллов игры за каждого приглашённ
 
 # language_code Telegram -> язык бота. Для остальных показываем выбор языка.
 LANG_FROM_CODE = {"en": "en", "ru": "ru", "be": "ru", "kk": "ru", "ky": "ru", "uz": "ru", "tg": "ru",
-                  "fr": "fr", "es": "es", "de": "de"}
+                  "fr": "fr", "es": "es", "de": "de", "uk": "uk"}
 
 ST = {
     "en": {
@@ -74,6 +74,15 @@ ST = {
         "joined": "🎉 Ihr Freund <b>{name}</b> ist über Ihren Link beigetreten! +{bonus} Spielpunkte 🎯",
         "friend": "ein Freund", "open": "🤖 Bot öffnen", "overview": "📊 Kryptomarkt jetzt",
         "overview_desc": "Top 10 mit 24-Std.-Änderung", "no_link": "⚠️ Einladungslinks sind vorübergehend nicht verfügbar.",
+    },
+    "uk": {
+        "invite": "🎁 <b>Запросіть друзів</b>\n\nЗа кожного друга, який прийде за вашим посиланням, ви отримаєте <b>+{bonus}</b> балів у грі 🎯\n\n"
+                  "Ваше посилання:\n{link}\n\n👥 Запрошено друзів: <b>{n}</b>",
+        "btn_send": "📤 Надіслати друзям", "btn_inline": "💬 Поділитися монетою",
+        "share_text": "Курси крипти, AI-аналітика ринку, цінові алерти та гра-прогноз — просто в Telegram 🚀",
+        "joined": "🎉 Ваш друг <b>{name}</b> прийшов за вашим посиланням! +{bonus} балів у грі 🎯",
+        "friend": "друг", "open": "🤖 Відкрити бота", "overview": "📊 Крипторинок зараз",
+        "overview_desc": "Топ-10 монет і зміна за 24 год", "no_link": "⚠️ Запрошувальні посилання тимчасово недоступні.",
     },
 }
 

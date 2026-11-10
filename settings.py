@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 import config
 
 INTERVALS = [1, 2, 3, 4, 6, 8, 12, 24]
-LANGS = ["en", "ru", "fr", "es", "de"]
+LANGS = ["en", "ru", "fr", "es", "de", "uk"]
 CURRENCIES = ["usd", "eur", "rub", "uah", "kzt"]
 
 SPEC = {

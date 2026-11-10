@@ -592,26 +592,47 @@ def add_facts(items: list) -> None:
                             [(t, Jsonb(texts)) for t, texts in items])
 
 
-def pick_facts(chat_ids: list) -> dict:
-    """Для каждого пользователя — факт, которого он ещё не видел (самый редко показанный).
+def pick_facts(chat_ids: list, langs: list = None) -> dict:
+    """Для каждого пользователя — факт, которого он ещё не видел (самый редко показанный) и у
+    которого есть текст на его языке (новый язык добавляется в старые факты постепенно).
     Возвращает {chat_id: (fact_id, {lang: text})}; пользователей, видевших всё, нет в словаре."""
     if not chat_ids:
         return {}
+    langs = list(langs) if langs else ["en"] * len(chat_ids)
     with pool.connection() as conn:
         rows = conn.execute(
             """
             SELECT u.chat_id, f.id, f.texts
-            FROM unnest(%s::bigint[]) AS u(chat_id)
+            FROM unnest(%s::bigint[], %s::text[]) AS u(chat_id, lang)
             CROSS JOIN LATERAL (
                 SELECT id, texts FROM facts f
-                WHERE NOT EXISTS (SELECT 1 FROM fact_seen s
+                WHERE f.texts ? u.lang
+                  AND NOT EXISTS (SELECT 1 FROM fact_seen s
                                   WHERE s.chat_id = u.chat_id AND s.fact_id = f.id)
                 ORDER BY f.shown, f.id LIMIT 1
             ) f
             """,
-            (list(chat_ids),),
+            (list(chat_ids), langs),
         ).fetchall()
     return {r[0]: (r[1], r[2]) for r in rows}
+
+
+def facts_missing_lang(lang: str, limit: int = 30) -> list:
+    """[(id, текст на английском)] фактов, у которых ещё нет перевода на lang (новые сначала)."""
+    with pool.connection() as conn:
+        return conn.execute(
+            "SELECT id, texts->>'en' FROM facts WHERE NOT texts ? %s AND texts ? 'en' "
+            "ORDER BY id DESC LIMIT %s", (lang, limit)).fetchall()
+
+
+def add_fact_translations(lang: str, items: dict) -> None:
+    """items: {fact_id: текст} — дописывает язык в JSON с текстами факта."""
+    if not items:
+        return
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.executemany("UPDATE facts SET texts = texts || jsonb_build_object(%s::text, %s::text) WHERE id = %s",
+                            [(lang, text, fid) for fid, text in items.items()])
 
 
 def mark_facts_seen(pairs: list) -> None:

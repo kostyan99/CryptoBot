@@ -5,7 +5,7 @@ import pytest
 
 import help_texts
 
-LANGS = ["en", "ru", "fr", "es", "de"]
+from settings import LANGS  # noqa: E402
 
 
 @pytest.mark.parametrize("lang", LANGS)

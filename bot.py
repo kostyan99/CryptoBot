@@ -126,6 +126,20 @@ T = {
         "delete_hint": "Um alle Ihre Daten zu löschen, senden Sie: /delete confirm",
         "deleted": "🗑 Ihre Daten wurden gelöscht. Senden Sie /start, um zurückzukehren.",
     },
+    "uk": {
+        "start": "👋 <b>Привіт!</b> Я надсилаю курс топ-монет, AI-аналітику та цікаві факти про крипту.\n\n"
+                 "{summary}\n\nУсе налаштовується кнопкою «⚙️ Налаштування».",
+        "rep": "📬 Курс", "ana": "🧠 Аналітика", "fact": "💡 Факти", "al": "🚨 Алерти",
+        "every": "кожні {n} год", "off": "вимкнено", "reports_off": "🔕 Розсилку вимкнено",
+        "stop": "🔕 Розсилку вимкнено. Повернути: /start або «⚙️ Налаштування».",
+        "settings": "Відкрийте налаштування бота:",
+        "no_webapp": "⚠️ Налаштування тимчасово недоступні.",
+        "btn_settings": "⚙️ Налаштування", "btn_top": "📊 Курс зараз",
+        "err": "⚠️ Не вдалося отримати дані. Спробуйте за хвилину.",
+        "help": "📖 <b>Команди</b>",
+        "delete_hint": "Щоб видалити всі ваші дані, надішліть: /delete confirm",
+        "deleted": "🗑 Ваші дані видалено. Щоб повернутися, надішліть /start.",
+    },
 }
 
 T_EXTRA = {
@@ -164,6 +178,13 @@ T_EXTRA = {
            "ob_tz": "🕐 Ihre Zeitzone: <b>{tz}</b> (UTC{off}). Nachrichten kommen zur vollen Stunde in dieser Zeitzone.",
            "ob_tz_btn": "🌍 Automatisch erkennen", "ob_tz_ok_btn": "✅ Stimmt so",
            "ob_tz_ok": "👍 Super! Nachrichten kommen in {tz}-Zeit."},
+    "uk": {"btn_game": "🎮 Гра",
+           "ob_prof": "✨ <b>Оберіть стиль</b> — налаштую все одним натисканням. Потім можна підкрутити в ⚙️ Налаштуваннях.\n\n{list}",
+           "ob_custom_btn": "⚙️ Налаштую сам", "ob_done": "✅ Профіль <b>{name}</b> увімкнено!\n\n{summary}",
+           "ob_custom": "👌 Залишив налаштування за замовчуванням. Відкрийте налаштування, щоб усе підкрутити:",
+           "ob_tz": "🕐 Ваш часовий пояс: <b>{tz}</b> (UTC{off}). Повідомлення приходять рівно на початку години за цим поясом.",
+           "ob_tz_btn": "🌍 Визначити автоматично", "ob_tz_ok_btn": "✅ Усе правильно",
+           "ob_tz_ok": "👍 Чудово! Повідомлення приходитимуть за часом {tz}."},
 }
 for _l in T:
     T[_l].update(T_EXTRA[_l])
@@ -264,6 +285,17 @@ T_V2 = {
                 "• 🎯 /game — Kurse tippen und die Tagesserie halten 🔥\n• 🎁 /invite — Freunde einladen, Punkte sammeln",
         "flood": "⏳ Zu viele Anfragen — bitte etwas langsamer.",
     },
+    "uk": {
+        "start": "👋 <b>Привіт!</b> Я ваш крипто-помічник: курси, AI-аналітика, цінові алерти, портфель і гра-прогноз.\n\n"
+                 "{summary}\n\n🔎 Надішліть будь-який тікер — <b>BTC</b>, <b>ETH</b> — і отримайте картку монети. /help — усе, що я вмію.",
+        "help": "📖 <b>Що я вмію</b>",
+        "btn_pf": "💼 Портфель", "btn_alerts": "🔔 Алерти", "btn_invite": "🎁 Запросити", "btn_share": "📤 Поділитися",
+        "ob_lang_btn": "🌍 Мова",
+        "tips": "💡 <b>Кілька підказок</b>\n• Надішліть будь-який тікер — <b>BTC</b>, <b>ETH</b>… — і отримайте картку монети\n"
+                "• 🔔 /alerts — «напиши, коли BTC буде 100k»\n• 💼 /portfolio — стежте за своїми монетами\n"
+                "• 🎯 /game — прогнозуйте ціну й тримайте серію днів 🔥\n• 🎁 /invite — кличте друзів і отримуйте бали",
+        "flood": "⏳ Забагато запитів — трохи повільніше, будь ласка.",
+    },
 }
 for _l in T:
     T[_l].update(T_V2[_l])
@@ -287,6 +319,9 @@ CMD_DESC = {
     "de": ["Kurse jetzt", "Coin-Karte (/price BTC)", "Kurschart (/chart BTC 7d)", "Preisalarme", "Mein Portfolio", "Spiel: Hoch oder runter",
            "Rangliste", "Freunde einladen", "Einstellungen", "Profil wählen", "Versand stoppen",
            "Versand aktivieren", "Hilfe"],
+    "uk": ["Курс зараз", "Картка монети (/price BTC)", "Графік ціни (/chart BTC 7d)", "Цінові алерти", "Мій портфель",
+           "Гра «Вгору чи вниз»", "Рейтинг гравців", "Запросити друзів", "Налаштування", "Обрати профіль",
+           "Вимкнути розсилку", "Увімкнути розсилку", "Довідка"],
 }
 
 # стартовые профили: (название, описание)
@@ -311,10 +346,14 @@ PROF = {
            "trader": ("📈 Trader", "Top 15 jede Stunde, Analyse alle 6 Std., keine Fakten, Alarme ab 3 %"),
            "minimal": ("🧘 Minimalist", "Einmal täglich um 9:00 ein kurzes Top 5, nur Alarme bei sehr starken Bewegungen, sonst nichts"),
            "explorer": ("🔎 Entdecker", "Top 5 alle 8 Std., Analyse zweimal täglich, jede Stunde ein neuer Fakt, keine Alarme")},
+    "uk": {"beginner": ("🌱 Новачок", "Топ-10 раз на 4 год, аналітика двічі на день, факт раз на 3 год, алерти лише про великі рухи, уночі тиша"),
+           "trader": ("📈 Трейдер", "Топ-15 щогодини, аналітика раз на 6 год, без фактів, алерти від 3%"),
+           "minimal": ("🧘 Мінімаліст", "Один короткий топ-5 на день о 9:00, лише алерти про сильні рухи, більше нічого"),
+           "explorer": ("🔎 Дослідник", "Топ-5 раз на 8 год, аналітика двічі на день, свіжий факт щогодини, без алертів")},
 }
 
 LANG_BUTTONS = [("en", "🇬🇧 English"), ("ru", "🇷🇺 Русский"), ("fr", "🇫🇷 Français"),
-                ("es", "🇪🇸 Español"), ("de", "🇩🇪 Deutsch")]
+                ("es", "🇪🇸 Español"), ("de", "🇩🇪 Deutsch"), ("uk", "🇺🇦 Українська")]
 
 
 def summary(s: dict) -> str:
@@ -574,11 +613,11 @@ def dispatcher_loop() -> None:
                 logger.error("Market data unavailable (%s): %s", cur, e)
 
         # факты берём из пула в БД: каждому пользователю тот, который он ещё не видел
-        fact_chats = [j.chat_id for j in jobs if j.want_facts and not j.want_analytics]
+        fact_jobs = [j for j in jobs if j.want_facts and not j.want_analytics]
         picked = {}
-        if fact_chats:
+        if fact_jobs:
             try:
-                picked = db.pick_facts(fact_chats)
+                picked = db.pick_facts([j.chat_id for j in fact_jobs], [j.settings["lang"] for j in fact_jobs])
             except Exception:
                 logger.exception("pick_facts failed")
 
@@ -660,6 +699,25 @@ def refill_facts(force: bool = False) -> None:
         logger.exception("Fact pool refill failed")
 
 
+def backfill_fact_translations(batches: int = 2, size: int = 30) -> None:
+    """Добавленный язык (например, украинский) постепенно дописывается в старые факты пула:
+    пара запросов к Gemini за прогрев, пока все факты не будут переведены."""
+    for lang in S.LANGS:
+        for _ in range(batches):
+            try:
+                todo = db.facts_missing_lang(lang, size)
+                if not todo:
+                    break
+                done = M.translate_facts(todo, lang)
+                if not done:
+                    return  # Gemini недоступен — попробуем в следующий прогрев
+                db.add_fact_translations(lang, done)
+                logger.info("Fact pool: +%s translations to %s", len(done), lang)
+            except Exception:
+                logger.exception("Fact translation backfill failed (%s)", lang)
+                return
+
+
 def prepare() -> None:
     try:
         currencies, ana_langs, fact_langs = db.active_currencies_langs()
@@ -679,6 +737,7 @@ def prepare() -> None:
             M.get_ai_text("analysis", ana_langs[0])
         if fact_langs:
             refill_facts()
+            backfill_fact_translations()
     except Exception:
         logger.exception("Prepare step failed")
 
@@ -1050,7 +1109,7 @@ def handle_start(message) -> None:
         if lang:
             send(chat_id, profile_text(lang), markup=profile_markup(lang, lang_btn=True))
         else:
-            send(chat_id, "🌍 <b>Choose your language · Выберите язык</b>", markup=lang_picker_markup())
+            send(chat_id, "🌍 <b>Choose your language · Оберіть мову · Выберите язык</b>", markup=lang_picker_markup())
         return
     if coin_id and show_card(chat_id, s, coin_id):
         return
@@ -1350,7 +1409,7 @@ def edit(call, text: str, markup=None) -> None:
 def on_onboarding(call, parts: list, chat_id: int) -> None:
     action = parts[1]
     if action == "langs":
-        edit(call, "🌍 <b>Choose your language · Выберите язык</b>", lang_picker_markup())
+        edit(call, "🌍 <b>Choose your language · Оберіть мову · Выберите язык</b>", lang_picker_markup())
     elif action == "lang" and len(parts) > 2 and parts[2] in S.LANGS:
         state = db.save_settings(chat_id, {"lang": parts[2]})
         lang = state.settings["lang"]
